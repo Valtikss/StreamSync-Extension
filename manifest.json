@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "StreamSync",
+  "version": "0.1.0",
+  "description": "Resynchronise la musique Spotify sur les VODs Twitch",
+
+  "permissions": ["storage", "identity", "tabs"],
+
+  "host_permissions": [
+    "https://www.twitch.tv/*",
+    "https://api.spotify.com/*",
+    "https://accounts.spotify.com/*",
+    "https://streamsync.fr/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": ["https://www.twitch.tv/videos/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "StreamSync",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}

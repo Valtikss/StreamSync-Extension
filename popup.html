@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>StreamSync</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ══════════════════════════════════════════
+       THÈMES — calés sur le site StreamSync
+       ══════════════════════════════════════════ */
+    :root {
+      --bg-0:          #07080e;
+      --bg-1:          #0c0e18;
+      --bg-2:          #121526;
+      --bg-3:          #1a1e35;
+      --bg-surface:    rgba(14,17,30,0.65);
+      --bg-glass:      rgba(18,21,38,0.5);
+
+      --accent:        #ff6b4a;
+      --accent-hover:  #ff8a70;
+      --accent-dim:    #c74e35;
+      --accent-glow:   rgba(255,107,74,0.08);
+      --accent-glow-md:rgba(255,107,74,0.14);
+      --accent-border: rgba(255,107,74,0.2);
+
+      --text-0:        #eaedf6;
+      --text-1:        #7a82a6;
+      --text-2:        #3e4468;
+
+      --border:        rgba(255,255,255,0.04);
+      --border-hover:  rgba(255,255,255,0.08);
+      --border-glass:  rgba(255,255,255,0.06);
+
+      color-scheme: dark;
+    }
+
+    body.light {
+      --bg-0:          #e8e8ee;
+      --bg-1:          #e0e0e8;
+      --bg-2:          #d6d6e0;
+      --bg-3:          #cbcbd8;
+      --bg-surface:    rgba(235,235,242,0.7);
+      --bg-glass:      rgba(235,235,242,0.55);
+
+      --accent-glow:   rgba(255,107,74,0.06);
+      --accent-glow-md:rgba(255,107,74,0.1);
+      --accent-border: rgba(255,107,74,0.25);
+
+      --text-0:        #1a1a2e;
+      --text-1:        #5a5e7a;
+      --text-2:        #9a9ec0;
+
+      --border:        rgba(0,0,0,0.05);
+      --border-hover:  rgba(0,0,0,0.1);
+      --border-glass:  rgba(0,0,0,0.06);
+
+      color-scheme: light;
+    }
+
+    /* ══════════════════════════════════════════
+       BASE
+       ══════════════════════════════════════════ */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 300px;
+      background: var(--bg-0);
+      color: var(--text-0);
+      font-family: 'Outfit', system-ui, sans-serif;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* thin scrollbar */
+    * { scrollbar-width: thin; scrollbar-color: var(--bg-3) transparent; }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+
+    /* ── Header ── */
+    .header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 16px 0;
+    }
+    .header-logo {
+      width: 18px; height: 18px; flex-shrink: 0;
+    }
+    .logo {
+      font-weight: 700; font-size: 13px; color: var(--text-0);
+      letter-spacing: -0.02em;
+    }
+    .version {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; color: var(--text-2); margin-left: auto;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex; padding: 10px 16px 0;
+      border-bottom: 1px solid var(--border);
+      gap: 2px;
+    }
+    .tab {
+      background: transparent; border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-2);
+      font-family: 'Outfit', system-ui, sans-serif;
+      font-size: 12px; font-weight: 600;
+      padding: 6px 14px 8px; cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      margin-bottom: -1px; letter-spacing: -0.01em;
+    }
+    .tab:hover { color: var(--text-1); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Tab panels ── */
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── Now playing ── */
+    #now-playing { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .np-idle {
+      font-size: 11px; color: var(--text-2); text-align: center; padding: 6px 0;
+      font-weight: 500;
+    }
+    .np-track { display: flex; align-items: center; gap: 10px; }
+    .np-eq { display: flex; align-items: flex-end; gap: 2px; height: 18px; flex-shrink: 0; }
+    .np-eq span {
+      display: block; width: 2.5px; background: var(--accent); border-radius: 2px;
+      animation: eq 0.65s ease-in-out infinite alternate;
+    }
+    .np-eq span:nth-child(1) { height: 5px;  animation-delay: 0s; }
+    .np-eq span:nth-child(2) { height: 13px; animation-delay: 0.2s; }
+    .np-eq span:nth-child(3) { height: 8px;  animation-delay: 0.1s; }
+    @keyframes eq {
+      from { transform: scaleY(0.35); opacity: 0.4; }
+      to   { transform: scaleY(1.6); opacity: 1; }
+    }
+    .np-eq.paused span { animation-play-state: paused; opacity: 0.25; }
+    .np-info { flex: 1; min-width: 0; }
+    .np-name {
+      font-size: 13px; font-weight: 600; color: var(--text-0);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      letter-spacing: -0.01em;
+    }
+    .np-artist {
+      font-size: 11px; color: var(--text-1); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .np-open {
+      flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 4px 9px;
+      background: var(--accent-glow); border: 1px solid var(--accent-border);
+      border-radius: 99px; color: var(--accent);
+      font-family: inherit; font-size: 10px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s, color 0.15s;
+    }
+    .np-open:hover { background: var(--accent-glow-md); color: var(--accent-hover); }
+    .np-progress { margin-top: 10px; }
+    .np-bar { height: 2px; background: var(--border-hover); border-radius: 2px; overflow: hidden; }
+    .np-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.8s linear; min-width: 3px; }
+    .np-times {
+      display: flex; justify-content: space-between; margin-top: 4px;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; color: var(--text-2); font-variant-numeric: tabular-nums;
+    }
+    .np-next { display: flex; align-items: baseline; gap: 5px; margin-top: 8px; }
+    .np-next-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-2); flex-shrink: 0;
+    }
+    .np-next-name {
+      font-size: 10px; color: var(--text-1);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── Sections ── */
+    .section { padding: 14px 16px; }
+    .sep { height: 1px; background: var(--border); }
+    .label {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; font-weight: 400; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-2); margin-bottom: 10px;
+    }
+
+    /* ── Spotify status ── */
+    .status-row { display: flex; align-items: center; justify-content: space-between; padding: 2px 0 10px; font-size: 12px; }
+    .status-label { color: var(--text-1); }
+    .badge-connected {
+      background: var(--accent-glow); color: var(--accent);
+      border: 1px solid var(--accent-border);
+      border-radius: 99px; padding: 2px 8px; font-size: 10px; font-weight: 600;
+    }
+    .badge-disconnected {
+      background: var(--bg-2); color: var(--text-2);
+      border: 1px solid var(--border-hover);
+      border-radius: 99px; padding: 2px 8px; font-size: 10px;
+    }
+
+    /* ── Inputs & buttons ── */
+    .input-row { display: flex; gap: 6px; margin-bottom: 6px; }
+    input[type="text"] {
+      flex: 1; background: var(--bg-2); border: 1px solid var(--border-hover);
+      border-radius: 8px; color: var(--text-0);
+      font-family: 'Space Mono', monospace; font-size: 11px; padding: 8px 10px; outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]::placeholder { color: var(--text-2); }
+    input[type="text"]:focus { border-color: var(--accent-border); }
+
+    .btn {
+      background: linear-gradient(135deg, #ff6b4a 0%, #ff9a76 100%);
+      color: #fff; border: none; border-radius: 8px;
+      font-family: inherit; font-size: 12px; font-weight: 700;
+      padding: 8px 14px; cursor: pointer;
+      transition: box-shadow 0.2s, transform 0.15s;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(255,107,74,0.15);
+    }
+    .btn:hover { box-shadow: 0 6px 24px rgba(255,107,74,0.25); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { background: var(--bg-3); color: var(--text-2); cursor: default; box-shadow: none; transform: none; }
+    .btn-full { width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+    .btn-ghost {
+      background: transparent; color: var(--text-1);
+      border: 1px solid var(--border-hover); border-radius: 8px;
+      font-family: inherit; font-size: 12px; padding: 8px 14px;
+      cursor: pointer; width: 100%; transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-ghost:hover { border-color: var(--accent-border); color: var(--accent); }
+
+    /* ── Devices ── */
+    #devices-section { display: none; }
+    .devices-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .btn-refresh {
+      background: transparent; border: none; color: var(--text-2);
+      cursor: pointer; font-size: 14px; padding: 0 2px; transition: color 0.15s;
+    }
+    .btn-refresh:hover { color: var(--accent); }
+    .device-list { display: flex; flex-direction: column; gap: 4px; }
+    .device-item {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    }
+    .device-item:hover { border-color: var(--accent-border); }
+    .device-item.selected { border-color: var(--accent-border); background: var(--accent-glow); }
+    .device-icon { font-size: 13px; flex-shrink: 0; }
+    .device-name {
+      flex: 1; font-size: 11px; color: var(--text-0);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .device-check { font-size: 11px; color: var(--accent); opacity: 0; }
+    .device-item.selected .device-check { opacity: 1; }
+    .devices-empty { font-size: 11px; color: var(--text-2); text-align: center; padding: 6px 0; }
+
+    /* ── Toggle switch ── */
+    .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; }
+    .setting-info { flex: 1; min-width: 0; padding-right: 12px; }
+    .setting-name { font-size: 12px; font-weight: 600; color: var(--text-0); letter-spacing: -0.01em; }
+    .setting-desc { font-size: 11px; color: var(--text-1); margin-top: 2px; line-height: 1.4; }
+
+    .toggle { flex-shrink: 0; position: relative; width: 36px; height: 20px; cursor: pointer; }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-track {
+      position: absolute; inset: 0; border-radius: 99px;
+      background: var(--bg-3); border: 1px solid var(--border-hover);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .toggle input:checked ~ .toggle-track { background: var(--accent-glow-md); border-color: var(--accent-border); }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--text-2); transition: transform 0.2s, background 0.2s;
+    }
+    .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); background: var(--accent); }
+
+    /* ── Misc ── */
+    .redirect-box {
+      background: var(--bg-2); border: 1px solid var(--border-hover);
+      border-radius: 8px; padding: 8px 10px;
+      font-family: 'Space Mono', monospace; font-size: 10px; color: var(--text-1);
+      word-break: break-all; margin-top: 6px; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .redirect-box:hover { border-color: var(--accent-border); background: var(--bg-3); }
+    .saved-msg { font-size: 11px; color: var(--accent); margin-top: 6px; display: none; font-weight: 600; }
+    .error-msg { font-size: 11px; color: #ff5555; margin-top: 4px; display: none; }
+
+    /* ── Tuto steps ── */
+    .tuto-step { display: flex; gap: 12px; align-items: flex-start; }
+    .tuto-num {
+      flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+      background: var(--accent-glow); border: 1px solid var(--accent-border);
+      color: var(--accent); font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; margin-top: 1px;
+    }
+    .tuto-body { flex: 1; min-width: 0; }
+    .tuto-title { font-size: 12px; font-weight: 600; color: var(--text-0); margin-bottom: 6px; line-height: 1.4; }
+    .tuto-sub { font-size: 11px; color: var(--text-1); line-height: 1.7; margin-top: 4px; }
+    .tuto-sub strong { color: var(--text-0); font-weight: 600; }
+    .copy-hint {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; color: var(--text-2); margin-top: 4px; letter-spacing: 0.02em;
+    }
+    .link { color: var(--accent); text-decoration: none; }
+    .link:hover { text-decoration: underline; color: var(--accent-hover); }
+
+    /* ── Footer ── */
+    .footer {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; text-align: center; padding: 10px 16px 12px;
+      color: var(--text-2); letter-spacing: 0.03em;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="icon.svg" alt="" class="header-logo" />
+    <span class="logo">StreamSync</span>
+    <span class="version">v0.1</span>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="home">Accueil</button>
+    <button class="tab" data-tab="settings">Paramètres</button>
+  </div>
+
+  <!-- ═══ HOME ═══ -->
+  <div class="panel active" id="panel-home">
+
+    <div id="now-playing">
+      <div class="np-idle" id="np-idle">Ouvre une VOD Twitch pour commencer</div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="section">
+      <div class="label">Spotify Viewer</div>
+      <div class="status-row">
+        <span class="status-label">Statut</span>
+        <span id="spotify-badge" class="badge-disconnected">Non connecté</span>
+      </div>
+      <button class="btn btn-full" id="btn-connect">Connecter Spotify</button>
+      <button class="btn-ghost" id="btn-disconnect" style="margin-top:6px;display:none">Déconnecter</button>
+      <div class="error-msg" id="connect-error"></div>
+    </div>
+
+    <div class="sep" id="devices-sep" style="display:none"></div>
+
+    <div class="section" id="devices-section">
+      <div class="devices-header">
+        <div class="label" style="margin-bottom:0">Appareil de lecture</div>
+        <button class="btn-refresh" id="btn-refresh-devices" title="Actualiser">↻</button>
+      </div>
+      <div class="device-list" id="device-list">
+        <div class="devices-empty">Ouvre Spotify sur un appareil</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ SETTINGS ═══ -->
+  <div class="panel" id="panel-settings">
+
+    <div class="section" style="padding-bottom:0">
+      <div class="label">Lecture</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Lecture automatique</div>
+          <div class="setting-desc">Lance Spotify automatiquement en regardant une VOD</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-autoplay" checked />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+
+      <div class="sep" style="margin: 2px 0"></div>
+
+      <div class="label" style="margin-top:12px">Apparence</div>
+      <div class="setting-row" style="padding-top:0">
+        <div class="setting-info">
+          <div class="setting-name">Thème clair</div>
+          <div class="setting-desc">Bascule entre le mode sombre et le mode clair</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-theme" />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="sep" style="margin: 0 16px"></div>
+
+    <div class="section" style="padding-bottom:18px">
+      <div class="label">Configuration Spotify</div>
+
+      <div class="tuto-step">
+        <div class="tuto-num">1</div>
+        <div class="tuto-body">
+          <div class="tuto-title">Copie cette Redirect URI</div>
+          <div class="redirect-box" id="redirect-uri" title="Cliquer pour copier">…</div>
+          <div class="copy-hint">↑ Clique pour copier</div>
+        </div>
+      </div>
+
+      <div class="sep" style="margin: 12px 0"></div>
+
+      <div class="tuto-step">
+        <div class="tuto-num">2</div>
+        <div class="tuto-body">
+          <div class="tuto-title">
+            Crée une app sur<br>
+            <a href="https://developer.spotify.com/dashboard" target="_blank" class="link">developer.spotify.com/dashboard</a>
+          </div>
+          <div class="tuto-sub">
+            → Clique <strong>Create app</strong><br>
+            → Nom : StreamSync (ou autre)<br>
+            → Redirect URI : colle l'URI du dessus<br>
+            → Coche <strong>Web API</strong> → <strong>Save</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="sep" style="margin: 12px 0"></div>
+
+      <div class="tuto-step">
+        <div class="tuto-num">3</div>
+        <div class="tuto-body">
+          <div class="tuto-title">Entre ton Client ID</div>
+          <div class="tuto-sub" style="margin-bottom:8px">
+            Dans ton app Spotify → <strong>Settings</strong> → copie le <strong>Client ID</strong>
+          </div>
+          <div class="input-row">
+            <input type="text" id="clientId" placeholder="Client ID Spotify" />
+          </div>
+          <button class="btn btn-full" id="btn-save" style="margin-top:8px">Sauvegarder</button>
+          <div class="saved-msg" id="saved-msg">✓ Sauvegardé</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="footer">
+    Fait par <a href="https://www.twitch.tv/valtiks_" target="_blank" class="link">Valtiks</a>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>
