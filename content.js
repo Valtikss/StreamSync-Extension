@@ -1,4 +1,4 @@
-// StreamSync — Content Script
+// StreamSync - Content Script
 // Injecté sur https://www.twitch.tv/videos/*
 
 (function () {
@@ -126,7 +126,7 @@
         const track = getCurrentTrack(posMs);
         const isPlaying = !videoEl.paused && !videoEl.ended;
 
-        // Synchro Spotify — uniquement si la piste change
+        // Synchro Spotify - uniquement si la piste change
         if (track && isPlaying && spotifyConnected && track.track_uri !== lastPlayedTrackUri) {
           sendSpotifyPlay(track);
         }

@@ -1,4 +1,4 @@
-// StreamSync — Service Worker MV3
+// StreamSync - Service Worker MV3
 // Gère : appels API backend, OAuth Spotify PKCE, contrôle Spotify Connect
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -245,11 +245,11 @@ async function getActiveDeviceId(token) {
 async function spotifyPlay(trackUri, offsetMs) {
   const token = await getAccessToken();
 
-  // Récupère un device_id — évite l'erreur NO_ACTIVE_DEVICE
+  // Récupère un device_id - évite l'erreur NO_ACTIVE_DEVICE
   const deviceId = await getActiveDeviceId(token);
 
   if (!deviceId) {
-    console.warn('[StreamSync] Aucun appareil Spotify actif — ouvre Spotify d\'abord');
+    console.warn('[StreamSync] Aucun appareil Spotify actif - ouvre Spotify d\'abord');
     throw new Error('Ouvre Spotify sur ton PC ou téléphone d\'abord');
   }
 
