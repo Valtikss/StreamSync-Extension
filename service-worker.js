@@ -67,8 +67,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       openSpotifyTrack(message.trackUri);
       sendResponse({ ok: true });
       return true;
+
+    case 'YOUTUBE_RESOLVE':
+      handleYoutubeResolve(message.trackUri, message.title, message.artist)
+        .then(videoId => sendResponse({ ok: true, videoId }))
+        .catch(err => sendResponse({ ok: false, error: err.message }));
+      return true;
+
+    case 'FETCH_ALBUM_ART':
+      handleFetchAlbumArt(message.trackUri)
+        .then(url => sendResponse({ ok: true, url }))
+        .catch(() => sendResponse({ ok: false }));
+      return true;
   }
 });
+
+// ─── Résolution YouTube (proxy vers backend) ─────────────────────────────────
+// Le viewer a choisi YouTube comme lecteur : on demande au backend de trouver
+// le videoId correspondant au track Spotify (résolution + cache côté serveur).
+
+async function handleYoutubeResolve(trackUri, title, artist) {
+  if (!trackUri) throw new Error('trackUri manquant');
+
+  const { apiUrl } = await getConfig();
+  const params = new URLSearchParams({
+    track_uri: trackUri,
+    title: title || '',
+    artist: artist || '',
+  });
+
+  const res = await fetch(`${apiUrl}/api/youtube/resolve?${params}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return data.videoId;
+}
+
+// ─── Album art (Spotify oEmbed, pas d'auth requise) ──────────────────────────
+
+async function handleFetchAlbumArt(trackUri) {
+  const trackId = trackUri.replace('spotify:track:', '');
+  const res = await fetch(
+    `https://open.spotify.com/oembed?url=https://open.spotify.com/track/${trackId}`
+  );
+  if (!res.ok) throw new Error('oEmbed failed');
+  const data = await res.json();
+  return data.thumbnail_url;
+}
 
 // ─── Timeline VOD ─────────────────────────────────────────────────────────────
 

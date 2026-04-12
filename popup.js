@@ -25,20 +25,75 @@ document.querySelectorAll('.tab').forEach(tab => {
 
 // ─── Chargement initial ────────────────────────────────────────────────────────
 
-chrome.storage.local.get(['spotifyClientId', 'spotify_access_token', 'selectedDeviceId', 'autoPlay'], result => {
-  document.getElementById('clientId').value = result.spotifyClientId || '';
-  // autoPlay activé par défaut si jamais défini
-  document.getElementById('toggle-autoplay').checked = result.autoPlay !== false;
-  const connected = !!result.spotify_access_token;
-  setSpotifyStatus(connected);
-  if (connected) loadDevices();
+chrome.storage.local.get(
+  ['spotifyClientId', 'spotify_access_token', 'selectedDeviceId', 'autoPlay', 'playerChoice', 'audioOffset'],
+  result => {
+    document.getElementById('clientId').value = result.spotifyClientId || '';
+    // autoPlay activé par défaut si jamais défini
+    document.getElementById('toggle-autoplay').checked = result.autoPlay !== false;
+    // Décalage audio : 3000ms par défaut
+    const offset = typeof result.audioOffset === 'number' ? result.audioOffset : 3000;
+    document.getElementById('offset-slider').value = offset;
+    document.getElementById('offset-value').textContent = formatOffset(offset);
+    const connected = !!result.spotify_access_token;
+    setSpotifyStatus(connected);
+    // Applique le choix de lecteur (Spotify par défaut)
+    applyPlayerChoice(result.playerChoice || 'spotify', connected);
+  }
+);
+
+// ─── Sélecteur de lecteur (Spotify / YouTube) ─────────────────────────────────
+
+document.querySelectorAll('.player-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const choice = btn.dataset.player;
+    chrome.storage.local.set({ playerChoice: choice }, () => {
+      chrome.storage.local.get(['spotify_access_token'], ({ spotify_access_token }) => {
+        applyPlayerChoice(choice, !!spotify_access_token);
+      });
+    });
+  });
 });
+
+// Met à jour l'UI en fonction du lecteur sélectionné.
+// `spotifyConnected` sert à savoir si on doit afficher la liste des devices.
+function applyPlayerChoice(choice, spotifyConnected) {
+  // Bascule visuelle du segmented control
+  document.querySelectorAll('.player-opt').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.player === choice);
+  });
+
+  const isYoutube = choice === 'youtube';
+
+  // YouTube info + devices uniquement selon le lecteur choisi
+  document.getElementById('yt-info-section').style.display = isYoutube ? 'block' : 'none';
+
+  if (isYoutube) {
+    showDevicesSection(false);
+  } else if (spotifyConnected) {
+    loadDevices();
+  }
+}
 
 // ─── Toggle lecture auto ───────────────────────────────────────────────────────
 
 document.getElementById('toggle-autoplay').addEventListener('change', e => {
   chrome.storage.local.set({ autoPlay: e.target.checked });
 });
+
+// ─── Décalage audio (offset stream) ──────────────────────────────────────────
+
+document.getElementById('offset-slider').addEventListener('input', e => {
+  const ms = parseInt(e.target.value, 10);
+  document.getElementById('offset-value').textContent = formatOffset(ms);
+  chrome.storage.local.set({ audioOffset: ms });
+});
+
+function formatOffset(ms) {
+  const s = ms / 1000;
+  const sign = s >= 0 ? '+' : '';
+  return `${sign}${s.toFixed(1)}s`;
+}
 
 const redirectUri = chrome.identity.getRedirectURL();
 const uriEl = document.getElementById('redirect-uri');
@@ -59,49 +114,100 @@ function startNowPlayingPolling() {
   nowPlayingInterval = setInterval(renderNowPlaying, 1000);
 }
 
+const NP_CIRC = 2 * Math.PI * 46; // ~289.03 — circumference of progress ring
+
+function buildNowPlayingHTML() {
+  return `
+    <div class="np-status">
+      <div class="np-eq" id="np-eq"><span></span><span></span><span></span></div>
+      <span class="np-status-text" id="np-status-text">À l'écoute</span>
+    </div>
+    <div class="np-vinyl-wrap">
+      <svg class="np-ring" viewBox="0 0 100 100">
+        <circle class="np-ring-bg" cx="50" cy="50" r="46" fill="none" stroke-width="1.5" />
+        <circle class="np-ring-fill" id="np-ring-fill" cx="50" cy="50" r="46" fill="none"
+          stroke-width="1.5" stroke-dasharray="${NP_CIRC}" stroke-dashoffset="${NP_CIRC}" stroke-linecap="round" />
+      </svg>
+      <div class="np-disc paused" id="np-disc">
+        <img class="np-disc-art" id="np-disc-art" style="display:none" />
+        <div class="np-disc-inner" id="np-disc-grooves"></div>
+        <div class="np-disc-hole"></div>
+        <div class="np-disc-pin"></div>
+      </div>
+    </div>
+    <div class="np-track-info">
+      <div class="np-name" id="np-name"></div>
+      <div class="np-artist" id="np-artist"></div>
+    </div>
+    <div class="np-times"><span id="np-time"></span></div>
+    <div class="np-next" id="np-next" style="display:none">
+      <span class="np-next-label">Suivant</span>
+      <span class="np-next-name" id="np-next-name"></span>
+    </div>
+  `;
+}
+
+function updateNowPlaying(track) {
+  const pct = track.pct ?? 0;
+  const playing = track.isPlaying;
+
+  // EQ + status
+  document.getElementById('np-eq').className = `np-eq${playing ? '' : ' paused'}`;
+  document.getElementById('np-status-text').textContent = playing ? 'À l\'écoute' : 'En pause';
+
+  // Disc
+  document.getElementById('np-disc').classList.toggle('paused', !playing);
+
+  // Progress ring
+  const ring = document.getElementById('np-ring-fill');
+  ring.style.strokeDashoffset = NP_CIRC - (pct / 100) * NP_CIRC;
+  ring.style.filter = playing ? 'drop-shadow(0 0 3px rgba(255,107,74,0.6))' : 'none';
+
+  // Album art
+  const artEl = document.getElementById('np-disc-art');
+  const groovesEl = document.getElementById('np-disc-grooves');
+  if (track.albumArt) {
+    if (artEl.src !== track.albumArt) artEl.src = track.albumArt;
+    artEl.style.display = 'block';
+    groovesEl.style.display = 'none';
+  } else {
+    artEl.style.display = 'none';
+    groovesEl.style.display = '';
+  }
+
+  // Track info
+  document.getElementById('np-name').textContent = track.track_name || '';
+  document.getElementById('np-artist').textContent = track.artist_name || '';
+  document.getElementById('np-time').textContent = formatMs(track.offset_ms);
+
+  // Next
+  const nextEl = document.getElementById('np-next');
+  if (track.next) {
+    nextEl.style.display = '';
+    document.getElementById('np-next-name').textContent =
+      `${track.next.track_name} · ${track.next.artist_name}`;
+  } else {
+    nextEl.style.display = 'none';
+  }
+}
+
 function renderNowPlaying() {
   chrome.storage.local.get(['ss_now_playing'], ({ ss_now_playing: track }) => {
     const container = document.getElementById('now-playing');
-    const idle = document.getElementById('np-idle');
 
     if (!track) {
-      container.innerHTML = '<div class="np-idle" id="np-idle">Ouvre une VOD Twitch pour commencer</div>';
+      if (!container.querySelector('.np-idle')) {
+        container.innerHTML = '<div class="np-idle">Ouvre une VOD Twitch pour commencer</div>';
+      }
       return;
     }
 
-    const pct = track.pct ?? 0;
-    const eqClass = track.isPlaying ? '' : 'paused';
-    const nextHtml = track.next
-      ? `<div class="np-next">
-           <span class="np-next-label">Suivant</span>
-           <span class="np-next-name">${esc(track.next.track_name)} · ${esc(track.next.artist_name)}</span>
-         </div>`
-      : '';
+    // Build vinyl structure once, then only update data
+    if (!container.querySelector('.np-vinyl-wrap')) {
+      container.innerHTML = buildNowPlayingHTML();
+    }
 
-    container.innerHTML = `
-      <div class="np-track">
-        <div class="np-eq ${eqClass}">
-          <span></span><span></span><span></span>
-        </div>
-        <div class="np-info">
-          <div class="np-name" title="${esc(track.track_name)}">${esc(track.track_name)}</div>
-          <div class="np-artist">${esc(track.artist_name)}</div>
-        </div>
-        <button class="np-open" id="np-btn-open">
-          <img src="spotify-logo.svg" width="9" height="9" alt="" />
-          Ouvrir
-        </button>
-      </div>
-      <div class="np-progress">
-        <div class="np-bar"><div class="np-fill" style="width:${pct}%"></div></div>
-        <div class="np-times"><span>${formatMs(track.offset_ms)}</span><span></span></div>
-      </div>
-      ${nextHtml}
-    `;
-
-    document.getElementById('np-btn-open')?.addEventListener('click', () => {
-      chrome.runtime.sendMessage({ type: 'SPOTIFY_OPEN_TRACK', trackUri: track.track_uri });
-    });
+    updateNowPlaying(track);
   });
 }
 
@@ -224,6 +330,10 @@ function setSpotifyStatus(connected) {
   const badge = document.getElementById('spotify-badge');
   const btnConnect = document.getElementById('btn-connect');
   const btnDisconnect = document.getElementById('btn-disconnect');
+
+  // Masque la section de config Spotify une fois connecté
+  document.getElementById('spotify-config-section').style.display = connected ? 'none' : 'block';
+  document.getElementById('spotify-config-sep').style.display = connected ? 'none' : 'block';
 
   if (connected) {
     badge.textContent = 'Connecté';

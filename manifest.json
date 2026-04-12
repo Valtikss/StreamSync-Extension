@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StreamSync",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Resynchronise la musique Spotify sur les VODs Twitch",
 
   "permissions": ["storage", "identity", "tabs"],
@@ -10,6 +10,8 @@
     "https://www.twitch.tv/*",
     "https://api.spotify.com/*",
     "https://accounts.spotify.com/*",
+    "https://open.spotify.com/*",
+    "https://www.youtube.com/*",
     "https://streamsync.fr/*",
     "http://localhost:3000/*",
     "http://127.0.0.1:3000/*"

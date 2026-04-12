@@ -127,47 +127,116 @@
       font-size: 11px; color: var(--text-2); text-align: center; padding: 6px 0;
       font-weight: 500;
     }
-    .np-track { display: flex; align-items: center; gap: 10px; }
-    .np-eq { display: flex; align-items: flex-end; gap: 2px; height: 18px; flex-shrink: 0; }
+
+    /* Status line */
+    .np-status {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      margin-bottom: 12px;
+    }
+    .np-status-text {
+      font-family: 'Space Mono', monospace;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-2);
+      line-height: 12px;
+    }
+    .np-eq { display: flex; align-items: center; gap: 2.5px; height: 16px; flex-shrink: 0; }
     .np-eq span {
-      display: block; width: 2.5px; background: var(--accent); border-radius: 2px;
+      display: block; width: 2px; background: var(--accent); border-radius: 2px;
       animation: eq 0.65s ease-in-out infinite alternate;
     }
-    .np-eq span:nth-child(1) { height: 5px;  animation-delay: 0s; }
-    .np-eq span:nth-child(2) { height: 13px; animation-delay: 0.2s; }
-    .np-eq span:nth-child(3) { height: 8px;  animation-delay: 0.1s; }
+    .np-eq span:nth-child(1) { height: 4px;  animation-delay: 0s; }
+    .np-eq span:nth-child(2) { height: 10px; animation-delay: 0.2s; }
+    .np-eq span:nth-child(3) { height: 6px;  animation-delay: 0.1s; }
     @keyframes eq {
       from { transform: scaleY(0.35); opacity: 0.4; }
       to   { transform: scaleY(1.6); opacity: 1; }
     }
     .np-eq.paused span { animation-play-state: paused; opacity: 0.25; }
-    .np-info { flex: 1; min-width: 0; }
+
+    /* Vinyl disc */
+    .np-vinyl-wrap {
+      position: relative; width: 100px; height: 100px;
+      margin: 0 auto 12px;
+    }
+    .np-ring {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      transform: rotate(-90deg);
+    }
+    .np-ring-bg { stroke: var(--border-hover); }
+    .np-ring-fill {
+      stroke: var(--accent);
+      transition: stroke-dashoffset 0.8s linear;
+    }
+    .np-disc {
+      position: absolute; inset: 6%; border-radius: 50%;
+      background: #1a1a2e;
+      box-shadow:
+        0 0 30px rgba(255,107,74,0.15),
+        0 8px 24px rgba(0,0,0,0.5),
+        inset 0 0 0 1px rgba(0,0,0,0.3);
+      transition: box-shadow 0.5s, filter 0.5s;
+    }
+    .np-disc:not(.paused) { animation: spin 24s linear infinite; }
+    .np-disc.paused {
+      filter: grayscale(0.3);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,0,0,0.3);
+    }
+    .np-disc-art {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .np-disc-inner {
+      position: absolute; inset: 0; border-radius: 50%;
+      background: radial-gradient(circle,
+        var(--bg-0) 16%, transparent 16.5%,
+        transparent 22%, rgba(255,255,255,0.04) 22.5%, transparent 23%,
+        transparent 34%, rgba(255,255,255,0.03) 34.5%, transparent 35%,
+        transparent 46%, rgba(255,255,255,0.03) 46.5%, transparent 47%,
+        transparent 58%, rgba(255,255,255,0.03) 58.5%, transparent 59%,
+        transparent 70%, rgba(255,255,255,0.03) 70.5%, transparent 71%,
+        transparent 82%, rgba(255,255,255,0.02) 82.5%, transparent 83%
+      );
+    }
+    .np-disc-hole {
+      position: absolute; top: 50%; left: 50%;
+      width: 14%; height: 14%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: var(--bg-0);
+      box-shadow: inset 0 0 4px rgba(0,0,0,0.9), 0 0 0 1px rgba(0,0,0,0.6);
+    }
+    .np-disc-pin {
+      position: absolute; top: 50%; left: 50%;
+      width: 4%; height: 4%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 4px rgba(255,107,74,0.8);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Track info */
+    .np-track-info { text-align: center; }
     .np-name {
-      font-size: 13px; font-weight: 600; color: var(--text-0);
+      font-size: 13px; font-weight: 700; color: var(--text-0);
+      letter-spacing: -0.02em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      letter-spacing: -0.01em;
     }
     .np-artist {
-      font-size: 11px; color: var(--text-1); margin-top: 1px;
+      font-size: 11px; color: var(--text-1); margin-top: 2px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .np-open {
-      flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 4px 9px;
-      background: var(--accent-glow); border: 1px solid var(--accent-border);
-      border-radius: 99px; color: var(--accent);
-      font-family: inherit; font-size: 10px; font-weight: 600;
-      cursor: pointer; transition: background 0.15s, color 0.15s;
-    }
-    .np-open:hover { background: var(--accent-glow-md); color: var(--accent-hover); }
-    .np-progress { margin-top: 10px; }
-    .np-bar { height: 2px; background: var(--border-hover); border-radius: 2px; overflow: hidden; }
-    .np-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.8s linear; min-width: 3px; }
     .np-times {
-      display: flex; justify-content: space-between; margin-top: 4px;
+      display: flex; justify-content: center; margin-top: 6px;
       font-family: 'Space Mono', monospace;
       font-size: 10px; color: var(--text-2); font-variant-numeric: tabular-nums;
     }
-    .np-next { display: flex; align-items: baseline; gap: 5px; margin-top: 8px; }
+    .np-next {
+      display: flex; align-items: baseline; justify-content: center; gap: 5px;
+      margin-top: 8px;
+    }
     .np-next-label {
       font-family: 'Space Mono', monospace;
       font-size: 9px; font-weight: 700; text-transform: uppercase;
@@ -186,6 +255,52 @@
       font-size: 10px; font-weight: 400; letter-spacing: 0.1em;
       text-transform: uppercase; color: var(--text-2); margin-bottom: 10px;
     }
+
+    /* ── Player switch (Spotify / YouTube) ── */
+    .player-switch {
+      display: flex;
+      background: var(--bg-2);
+      border: 1px solid var(--border-hover);
+      border-radius: 99px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .player-opt {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 10px;
+      background: transparent;
+      border: 0;
+      border-radius: 99px;
+      color: var(--text-1);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .player-opt:hover { color: var(--text-0); }
+    .player-opt.active {
+      background: var(--accent-glow-md);
+      color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent-border);
+    }
+    .player-opt svg { display: block; }
+
+    /* ── YouTube info card ── */
+    .yt-info {
+      font-size: 11px;
+      color: var(--text-1);
+      line-height: 1.55;
+      padding: 10px 12px;
+      background: var(--bg-2);
+      border: 1px solid var(--border-hover);
+      border-radius: 8px;
+    }
+    .yt-info strong { color: var(--accent); font-weight: 600; }
 
     /* ── Spotify status ── */
     .status-row { display: flex; align-items: center; justify-content: space-between; padding: 2px 0 10px; font-size: 12px; }
@@ -280,6 +395,32 @@
     }
     .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); background: var(--accent); }
 
+    /* ── Offset slider ── */
+    .offset-control { flex-shrink: 0; }
+    .offset-value {
+      font-family: 'Space Mono', monospace;
+      font-size: 12px; font-weight: 700; color: var(--accent);
+    }
+    .offset-slider-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 0 6px;
+    }
+    .offset-bound {
+      font-family: 'Space Mono', monospace;
+      font-size: 9px; color: var(--text-2); flex-shrink: 0;
+    }
+    input[type="range"] {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; background: var(--bg-3); border-radius: 2px; outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); cursor: pointer;
+      border: 2px solid var(--bg-0);
+      box-shadow: 0 0 6px rgba(255,107,74,0.3);
+    }
+
     /* ── Misc ── */
     .redirect-box {
       background: var(--bg-2); border: 1px solid var(--border-hover);
@@ -325,7 +466,7 @@
   <div class="header">
     <img src="icon.svg" alt="" class="header-logo" />
     <span class="logo">StreamSync</span>
-    <span class="version">v0.1</span>
+    <span class="version">v0.2</span>
   </div>
 
   <!-- Tabs -->
@@ -344,14 +485,29 @@
     <div class="sep"></div>
 
     <div class="section">
-      <div class="label">Spotify Viewer</div>
-      <div class="status-row">
-        <span class="status-label">Statut</span>
-        <span id="spotify-badge" class="badge-disconnected">Non connecté</span>
+      <div class="label">Lecteur audio</div>
+      <div class="player-switch" id="player-switch">
+        <button class="player-opt active" data-player="spotify">
+          <img src="spotify-logo.svg" width="11" height="11" alt="" />
+          Spotify
+        </button>
+        <button class="player-opt" data-player="youtube">
+          <svg width="13" height="9" viewBox="0 0 24 17" aria-hidden="true">
+            <path fill="currentColor" d="M23.5 2.65a3.02 3.02 0 0 0-2.13-2.13C19.49 0 12 0 12 0S4.51 0 2.63.52A3.02 3.02 0 0 0 .5 2.65C0 4.53 0 8.5 0 8.5s0 3.97.5 5.85a3.02 3.02 0 0 0 2.13 2.13C4.51 17 12 17 12 17s7.49 0 9.37-.52a3.02 3.02 0 0 0 2.13-2.13C24 12.47 24 8.5 24 8.5s0-3.97-.5-5.85ZM9.55 12.13V4.87L15.82 8.5l-6.27 3.63Z"/>
+          </svg>
+          YouTube
+        </button>
       </div>
-      <button class="btn btn-full" id="btn-connect">Connecter Spotify</button>
-      <button class="btn-ghost" id="btn-disconnect" style="margin-top:6px;display:none">Déconnecter</button>
-      <div class="error-msg" id="connect-error"></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="section" id="yt-info-section" style="display:none">
+      <div class="label">YouTube</div>
+      <div class="yt-info">
+        Le lecteur YouTube s'affiche en bas à droite du VOD.<br>
+        Clique sur <strong>Activer le son</strong> à la première lecture (Chrome bloque l'audio auto).
+      </div>
     </div>
 
     <div class="sep" id="devices-sep" style="display:none"></div>
@@ -376,13 +532,28 @@
       <div class="setting-row">
         <div class="setting-info">
           <div class="setting-name">Lecture automatique</div>
-          <div class="setting-desc">Lance Spotify automatiquement en regardant une VOD</div>
+          <div class="setting-desc">Lance le lecteur automatiquement en regardant une VOD</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="toggle-autoplay" checked />
           <div class="toggle-track"></div>
           <div class="toggle-thumb"></div>
         </label>
+      </div>
+
+      <div class="setting-row" style="padding-bottom:0">
+        <div class="setting-info">
+          <div class="setting-name">Décalage audio</div>
+          <div class="setting-desc">Compense le délai du stream</div>
+        </div>
+        <div class="offset-control">
+          <span class="offset-value" id="offset-value">+3.0s</span>
+        </div>
+      </div>
+      <div class="offset-slider-row">
+        <span class="offset-bound">-5s</span>
+        <input type="range" id="offset-slider" min="-5000" max="15000" step="500" value="3000" />
+        <span class="offset-bound">+15s</span>
       </div>
 
       <div class="sep" style="margin: 2px 0"></div>
@@ -403,7 +574,20 @@
 
     <div class="sep" style="margin: 0 16px"></div>
 
-    <div class="section" style="padding-bottom:18px">
+    <div class="section" id="spotify-section">
+      <div class="label">Spotify</div>
+      <div class="status-row">
+        <span class="status-label">Statut</span>
+        <span id="spotify-badge" class="badge-disconnected">Non connecté</span>
+      </div>
+      <button class="btn btn-full" id="btn-connect">Connecter Spotify</button>
+      <button class="btn-ghost" id="btn-disconnect" style="margin-top:6px;display:none">Déconnecter</button>
+      <div class="error-msg" id="connect-error"></div>
+    </div>
+
+    <div class="sep" style="margin: 0 16px" id="spotify-config-sep"></div>
+
+    <div class="section" style="padding-bottom:18px" id="spotify-config-section">
       <div class="label">Configuration Spotify</div>
 
       <div class="tuto-step">
