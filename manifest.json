@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "StreamSync",
-  "version": "0.2.0",
+  "version": "3.0",
   "description": "Resynchronise la musique Spotify sur les VODs Twitch",
 
-  "permissions": ["storage", "identity", "tabs"],
+  "permissions": ["storage", "identity", "tabs", "notifications"],
 
   "host_permissions": [
     "https://www.twitch.tv/*",

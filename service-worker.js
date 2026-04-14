@@ -23,7 +23,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'FETCH_VOD_TIMELINE':
       handleFetchTimeline(message.videoId)
         .then(data => sendResponse({ ok: true, data }))
-        .catch(err => sendResponse({ ok: false, error: err.message }));
+        .catch(err => sendResponse({
+          ok: false,
+          error: err.message,
+          errorCode: err.code || null,
+          errorData: err.data || null,
+        }));
       return true;
 
     case 'SPOTIFY_CONNECT':
@@ -67,6 +72,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       openSpotifyTrack(message.trackUri);
       sendResponse({ ok: true });
       return true;
+
+    case 'SPOTIFY_PLAYBACK_STATE':
+      getAccessToken()
+        .then(token => getPlaybackState(token))
+        .then(state => sendResponse({ ok: true, state }))
+        .catch(err => sendResponse({ ok: false, error: err.message }));
+      return true;
+
+    case 'NOTIFY_TRACK_CHANGE':
+      maybeShowTrackNotification(message.track, sender.tab?.id);
+      sendResponse({ ok: true });
+      return false;
 
     case 'YOUTUBE_RESOLVE':
       handleYoutubeResolve(message.trackUri, message.title, message.artist)
@@ -124,7 +141,11 @@ async function handleFetchTimeline(videoId) {
   const res = await fetch(`${apiUrl}/api/vod/${videoId}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    // Enrichit l'erreur pour que le content script puisse distinguer free_plan_limit, sub_only, etc.
+    const err = new Error(body.message || body.error || `HTTP ${res.status}`);
+    err.code = body.error || null;
+    err.data = body;
+    throw err;
   }
   return res.json();
 }
@@ -160,7 +181,21 @@ async function connectSpotify() {
       try {
         const url = new URL(redirectUrl);
         const code = url.searchParams.get('code');
-        if (!code) return reject(new Error('Code manquant dans la réponse'));
+        // Spotify renvoie ?error=... quand quelque chose cloche : redirect URI
+        // mismatch, scope refusé, app mal configurée, etc.
+        const oauthError = url.searchParams.get('error');
+        if (oauthError) {
+          const desc = url.searchParams.get('error_description');
+          const messages = {
+            'invalid_redirect_uri': 'Redirect URI incorrect. Vérifie qu\'elle est bien copiée à l\'identique dans ton app Spotify Developer Dashboard.',
+            'access_denied': 'Tu as refusé l\'autorisation Spotify.',
+            'invalid_client': 'Client ID invalide. Vérifie que tu as bien copié le Client ID de ton app Spotify.',
+            'invalid_scope': 'Scope invalide. L\'app Spotify doit avoir la Web API activée.',
+          };
+          const friendly = messages[oauthError] || `${oauthError}${desc ? ` (${desc})` : ''}`;
+          return reject(new Error(friendly));
+        }
+        if (!code) return reject(new Error('Réponse Spotify invalide (pas de code). Vérifie ton Redirect URI dans le dashboard Spotify.'));
 
         const { pkce_verifier } = await chrome.storage.local.get(['pkce_verifier']);
 
@@ -273,6 +308,58 @@ async function getDevices(token) {
   const { devices } = await res.json();
   return devices || [];
 }
+
+// État de lecture Spotify (pour calcul drift sync depuis le popup)
+async function getPlaybackState(token) {
+  const res = await fetch('https://api.spotify.com/v1/me/player', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 204 || !res.ok) return null;
+  return res.json();
+}
+
+// ─── Notifications desktop ───────────────────────────────────────────────────
+const notifTabMap = {}; // notification_id → tab_id (pour focus au clic)
+
+async function maybeShowTrackNotification(track, tabId) {
+  if (!track?.track_name) return;
+  const { notificationsEnabled } = await chrome.storage.local.get(['notificationsEnabled']);
+  if (!notificationsEnabled) return;
+
+  const id = `streamsync-track-${Date.now()}`;
+  const opts = {
+    type: 'basic',
+    iconUrl: track.albumArt || 'icons/icon128.png',
+    title: track.track_name,
+    message: track.artist_name || '',
+    silent: true,
+    requireInteraction: false,
+    priority: 0,
+  };
+  try {
+    chrome.notifications.create(id, opts, () => {
+      if (chrome.runtime.lastError) return;
+      if (tabId) notifTabMap[id] = tabId;
+      // Auto-dismiss après 5s pour pas que ça s'empile
+      setTimeout(() => chrome.notifications.clear(id), 5000);
+    });
+  } catch (e) { /* notification API indisponible */ }
+}
+
+// Click sur la notification → focus l'onglet VOD source
+chrome.notifications.onClicked.addListener(notifId => {
+  const tabId = notifTabMap[notifId];
+  if (!tabId) return;
+  chrome.tabs.update(tabId, { active: true });
+  chrome.tabs.get(tabId, tab => {
+    if (tab?.windowId) chrome.windows.update(tab.windowId, { focused: true });
+  });
+  chrome.notifications.clear(notifId);
+});
+
+chrome.notifications.onClosed.addListener(notifId => {
+  delete notifTabMap[notifId];
+});
 
 // Résout le device à utiliser : celui sélectionné manuellement, ou l'actif, ou le premier
 async function getActiveDeviceId(token) {

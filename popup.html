@@ -127,6 +127,37 @@
       font-size: 11px; color: var(--text-2); text-align: center; padding: 6px 0;
       font-weight: 500;
     }
+    .np-idle.np-error {
+      color: var(--accent, #ff6b4a);
+      line-height: 1.5;
+      padding: 10px 4px;
+    }
+
+    /* Bannière "actif sur ..." quand le popup est ouvert hors de la VOD */
+    .np-active-tab {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; margin-bottom: 12px;
+      background: var(--accent-glow); border: 1px solid var(--accent-border);
+      border-radius: 8px; cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .np-active-tab:hover { background: var(--accent-glow-md); border-color: var(--accent); }
+    .np-active-dot {
+      width: 6px; height: 6px; flex-shrink: 0;
+      background: var(--accent); border-radius: 50%;
+      box-shadow: 0 0 6px var(--accent);
+      animation: np-active-pulse 1.6s ease-in-out infinite;
+    }
+    .np-active-text {
+      flex: 1; min-width: 0;
+      font-size: 11px; color: var(--text-1);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .np-active-text strong { color: var(--text-0); font-weight: 600; }
+    @keyframes np-active-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
 
     /* Status line */
     .np-status {
@@ -247,6 +278,88 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
+    /* ── Now-playing actions (prev / spotify / next) ── */
+    .np-actions {
+      display: flex; justify-content: center; align-items: center; gap: 14px;
+      margin-top: 10px;
+    }
+    .np-action-btn {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent; border: 1px solid var(--border-hover);
+      border-radius: 50%; color: var(--text-1); cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      padding: 0;
+    }
+    .np-action-btn:hover { color: var(--accent); border-color: var(--accent-border); background: var(--accent-glow); }
+    .np-action-btn:disabled { opacity: 0.3; cursor: not-allowed; color: var(--text-2); }
+    .np-action-btn:disabled:hover { background: transparent; border-color: var(--border-hover); color: var(--text-2); }
+    .np-action-btn.np-action-spotify {
+      width: 32px; height: 32px; color: var(--accent);
+      border-color: var(--accent-border); background: var(--accent-glow);
+    }
+    .np-action-btn.np-action-spotify:hover { background: var(--accent-glow-md); }
+
+    /* ── Sync drift ── */
+    .np-drift {
+      margin-top: 6px;
+      text-align: center;
+      font-family: 'Space Mono', monospace;
+      font-size: 9px;
+      color: var(--text-2);
+      letter-spacing: 0.04em;
+    }
+    .np-drift.warn { color: #f59e0b; }
+    .np-drift.bad { color: #ef4444; }
+
+    /* ── Tracklist ── */
+    #tracklist-section { padding: 0 16px 14px; }
+    .tracklist-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0 8px;
+    }
+    .tracklist-count {
+      font-family: 'Space Mono', monospace;
+      font-size: 9px; color: var(--text-2);
+    }
+    .tracklist {
+      max-height: 200px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 1px;
+      background: var(--bg-2); border-radius: 8px; padding: 4px;
+      border: 1px solid var(--border);
+    }
+    .tracklist-item {
+      display: grid; grid-template-columns: 42px 1fr; gap: 8px; align-items: center;
+      padding: 6px 8px; border-radius: 5px; cursor: pointer;
+      transition: background 0.1s;
+    }
+    .tracklist-item:hover { background: var(--bg-3); }
+    .tracklist-item.current {
+      background: var(--accent-glow);
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+    .tracklist-item.current .tracklist-time { color: var(--accent); }
+    .tracklist-item.current .tracklist-name { color: var(--text-0); font-weight: 600; }
+    .tracklist-time {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; color: var(--text-2); font-variant-numeric: tabular-nums;
+    }
+    .tracklist-info { min-width: 0; }
+    .tracklist-name {
+      font-size: 11px; color: var(--text-1);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      letter-spacing: -0.01em;
+    }
+    .tracklist-artist {
+      font-size: 10px; color: var(--text-2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+    .tracklist-empty {
+      font-size: 11px; color: var(--text-2); text-align: center;
+      padding: 12px 0;
+    }
+
     /* ── Sections ── */
     .section { padding: 14px 16px; }
     .sep { height: 1px; background: var(--border); }
@@ -282,11 +395,15 @@
       cursor: pointer;
       transition: background 0.15s, color 0.15s;
     }
-    .player-opt:hover { color: var(--text-0); }
+    .player-opt:hover:not(:disabled) { color: var(--text-0); }
     .player-opt.active {
       background: var(--accent-glow-md);
       color: var(--accent);
       box-shadow: inset 0 0 0 1px var(--accent-border);
+    }
+    .player-opt:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
     .player-opt svg { display: block; }
 
@@ -466,7 +583,7 @@
   <div class="header">
     <img src="icon.svg" alt="" class="header-logo" />
     <span class="logo">StreamSync</span>
-    <span class="version">v0.2</span>
+    <span class="version">v3.0</span>
   </div>
 
   <!-- Tabs -->
@@ -483,6 +600,16 @@
     </div>
 
     <div class="sep"></div>
+
+    <div id="tracklist-section" style="display:none">
+      <div class="tracklist-header">
+        <div class="label" style="margin-bottom:0">Morceaux du VOD</div>
+        <span class="tracklist-count" id="tracklist-count"></span>
+      </div>
+      <div class="tracklist" id="tracklist"></div>
+    </div>
+
+    <div class="sep" id="tracklist-sep" style="display:none"></div>
 
     <div class="section">
       <div class="label">Lecteur audio</div>
@@ -556,6 +683,18 @@
         <span class="offset-bound">+15s</span>
       </div>
 
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name">Notifications de morceau</div>
+          <div class="setting-desc">Affiche une notification desktop à chaque changement de track</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-notifications" />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+
       <div class="sep" style="margin: 2px 0"></div>
 
       <div class="label" style="margin-top:12px">Apparence</div>
@@ -580,9 +719,7 @@
         <span class="status-label">Statut</span>
         <span id="spotify-badge" class="badge-disconnected">Non connecté</span>
       </div>
-      <button class="btn btn-full" id="btn-connect">Connecter Spotify</button>
-      <button class="btn-ghost" id="btn-disconnect" style="margin-top:6px;display:none">Déconnecter</button>
-      <div class="error-msg" id="connect-error"></div>
+      <button class="btn-ghost" id="btn-disconnect" style="display:none">Déconnecter</button>
     </div>
 
     <div class="sep" style="margin: 0 16px" id="spotify-config-sep"></div>
@@ -629,8 +766,11 @@
           <div class="input-row">
             <input type="text" id="clientId" placeholder="Client ID Spotify" />
           </div>
-          <button class="btn btn-full" id="btn-save" style="margin-top:8px">Sauvegarder</button>
-          <div class="saved-msg" id="saved-msg">✓ Sauvegardé</div>
+          <button class="btn btn-full" id="btn-connect" style="margin-top:10px">
+            <img src="spotify-logo.svg" width="12" height="12" alt="" />
+            Connecter Spotify
+          </button>
+          <div class="error-msg" id="connect-error"></div>
         </div>
       </div>
 
