@@ -1,6 +1,10 @@
 // StreamSync - Service Worker MV3
 // Gère : appels API backend, OAuth Spotify PKCE, contrôle Spotify Connect
 
+importScripts('i18n/locales.js', 'i18n/i18n.js');
+self.SS_I18N.loadLang();
+const _t = (key, vars) => self.SS_I18N.t(key, vars);
+
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const API_URL = 'https://streamsync.fr';
@@ -45,8 +49,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case 'SPOTIFY_GET_DEVICES':
       getAccessToken()
-        .then(token => getDevices(token))
-        .then(devices => sendResponse({ ok: true, devices }))
+        .then(async token => {
+          // Devices + profil en parallèle pour pouvoir détecter un compte Free
+          // (Premium requis pour le contrôle de lecture via Spotify Connect)
+          const [devices, profile] = await Promise.all([getDevices(token), getProfile(token)]);
+          return { devices, product: profile?.product || null };
+        })
+        .then(data => sendResponse({ ok: true, ...data }))
         .catch(err => sendResponse({ ok: false, error: err.message }));
       return true;
 
@@ -154,7 +163,7 @@ async function handleFetchTimeline(videoId) {
 
 async function connectSpotify() {
   const { clientId } = await getConfig();
-  if (!clientId) throw new Error('Spotify Client ID non configuré dans le popup');
+  if (!clientId) throw new Error(_t('err.clientIdMissing'));
 
   const { verifier, challenge } = await generatePKCE();
   const redirectUri = chrome.identity.getRedirectURL();
@@ -175,7 +184,7 @@ async function connectSpotify() {
   return new Promise((resolve, reject) => {
     chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async redirectUrl => {
       if (chrome.runtime.lastError || !redirectUrl) {
-        return reject(new Error(chrome.runtime.lastError?.message || 'Auth annulée'));
+        return reject(new Error(chrome.runtime.lastError?.message || _t('err.authCancelled')));
       }
 
       try {
@@ -187,15 +196,15 @@ async function connectSpotify() {
         if (oauthError) {
           const desc = url.searchParams.get('error_description');
           const messages = {
-            'invalid_redirect_uri': 'Redirect URI incorrect. Vérifie qu\'elle est bien copiée à l\'identique dans ton app Spotify Developer Dashboard.',
-            'access_denied': 'Tu as refusé l\'autorisation Spotify.',
-            'invalid_client': 'Client ID invalide. Vérifie que tu as bien copié le Client ID de ton app Spotify.',
-            'invalid_scope': 'Scope invalide. L\'app Spotify doit avoir la Web API activée.',
+            'invalid_redirect_uri': _t('err.redirectUri'),
+            'access_denied': _t('err.accessDenied'),
+            'invalid_client': _t('err.invalidClient'),
+            'invalid_scope': _t('err.invalidScope'),
           };
           const friendly = messages[oauthError] || `${oauthError}${desc ? ` (${desc})` : ''}`;
           return reject(new Error(friendly));
         }
-        if (!code) return reject(new Error('Réponse Spotify invalide (pas de code). Vérifie ton Redirect URI dans le dashboard Spotify.'));
+        if (!code) return reject(new Error(_t('err.noCode')));
 
         const { pkce_verifier } = await chrome.storage.local.get(['pkce_verifier']);
 
@@ -213,7 +222,7 @@ async function connectSpotify() {
 
         if (!tokenRes.ok) {
           const err = await tokenRes.json();
-          return reject(new Error(err.error_description || 'Échange de token échoué'));
+          return reject(new Error(err.error_description || _t('err.tokenExchange')));
         }
 
         const tokens = await tokenRes.json();
@@ -257,7 +266,7 @@ async function getAccessToken() {
     'spotify_token_expires_at',
   ]);
 
-  if (!stored.spotify_access_token) throw new Error('Spotify non connecté');
+  if (!stored.spotify_access_token) throw new Error(_t('err.notConnected'));
 
   // Refresh si expiré dans moins de 60s
   if (Date.now() > stored.spotify_token_expires_at - 60_000) {
@@ -280,7 +289,7 @@ async function refreshToken(refreshToken) {
     }),
   });
 
-  if (!res.ok) throw new Error('Refresh token Spotify échoué');
+  if (!res.ok) throw new Error(_t('err.refreshFailed'));
 
   const tokens = await res.json();
   await chrome.storage.local.set({
@@ -307,6 +316,20 @@ async function getDevices(token) {
   if (!res.ok) return [];
   const { devices } = await res.json();
   return devices || [];
+}
+
+// Récupère le profil Spotify (surtout pour le champ "product" : premium|free|open).
+// Résilient : retourne null en cas d'erreur plutôt que de bloquer le devices loader.
+async function getProfile(token) {
+  try {
+    const res = await fetch('https://api.spotify.com/v1/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 // État de lecture Spotify (pour calcul drift sync depuis le popup)
@@ -384,7 +407,7 @@ async function spotifyPlay(trackUri, offsetMs) {
 
   if (!deviceId) {
     console.warn('[StreamSync] Aucun appareil Spotify actif - ouvre Spotify d\'abord');
-    throw new Error('Ouvre Spotify sur ton PC ou téléphone d\'abord');
+    throw new Error(_t('err.openSpotifyFirst'));
   }
 
   const url = `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`;

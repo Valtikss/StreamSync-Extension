@@ -132,6 +132,26 @@
       line-height: 1.5;
       padding: 10px 4px;
     }
+    .np-f5-hint {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; margin: 2px 0;
+      background: var(--accent-glow, rgba(255,107,74,0.08));
+      border: 1px solid var(--accent-border, rgba(255,107,74,0.3));
+      border-radius: 8px;
+      font-size: 11px; color: var(--text-1);
+      line-height: 1.45;
+    }
+    .np-f5-hint kbd {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px;
+      background: var(--bg-2); border: 1px solid var(--border-hover);
+      color: var(--accent); white-space: nowrap;
+    }
+    .np-f5-hint .np-f5-icon {
+      flex-shrink: 0; color: var(--accent);
+      display: flex; align-items: center;
+    }
 
     /* Bannière "actif sur ..." quand le popup est ouvert hors de la VOD */
     .np-active-tab {
@@ -490,6 +510,45 @@
     .device-check { font-size: 11px; color: var(--accent); opacity: 0; }
     .device-item.selected .device-check { opacity: 1; }
     .devices-empty { font-size: 11px; color: var(--text-2); text-align: center; padding: 6px 0; }
+    .devices-empty-hint {
+      font-size: 10px; color: var(--text-2); line-height: 1.4;
+      margin-top: 4px; opacity: 0.85;
+    }
+    .btn-retry-devices {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 8px; padding: 5px 10px;
+      background: var(--accent-glow); border: 1px solid var(--accent-border);
+      border-radius: 6px; color: var(--accent);
+      font-family: inherit; font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-retry-devices:hover { background: var(--accent-border); }
+    .devices-free-warn {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px 12px;
+      background: var(--accent-glow); border: 1px solid var(--accent-border);
+      border-radius: 8px;
+    }
+    .devices-free-warn-icon {
+      flex-shrink: 0; font-size: 14px; color: var(--accent);
+      font-weight: 700; line-height: 1.2;
+    }
+    .devices-free-warn-body { flex: 1; min-width: 0; }
+    .devices-free-warn-title {
+      font-size: 11px; font-weight: 700; color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .devices-free-warn-desc {
+      font-size: 10.5px; color: var(--text-1); line-height: 1.45;
+    }
+    .devices-free-warn-desc strong { color: var(--text-0); font-weight: 700; }
+    .devices-free-warn-cta {
+      display: inline-block; margin-top: 8px;
+      font-size: 11px; font-weight: 600;
+      color: var(--accent); text-decoration: none;
+      transition: color 0.15s;
+    }
+    .devices-free-warn-cta:hover { text-decoration: underline; }
 
     /* ── Toggle switch ── */
     .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; }
@@ -512,12 +571,36 @@
     }
     .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); background: var(--accent); }
 
+    /* ── Lang select ── */
+    .lang-select {
+      flex-shrink: 0;
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 8px;
+      font-family: inherit; font-size: 11px; font-weight: 600;
+      color: var(--text-0); cursor: pointer; outline: none;
+      transition: border-color 0.15s;
+    }
+    .lang-select:hover, .lang-select:focus { border-color: var(--accent-border); }
+
     /* ── Offset slider ── */
     .offset-control { flex-shrink: 0; }
     .offset-value {
       font-family: 'Space Mono', monospace;
       font-size: 12px; font-weight: 700; color: var(--accent);
+      cursor: pointer; padding: 1px 4px; border-radius: 4px;
+      transition: background 0.15s;
     }
+    .offset-value:hover { background: var(--accent-glow); }
+    .offset-input {
+      width: 54px;
+      font-family: 'Space Mono', monospace;
+      font-size: 12px; font-weight: 700; color: var(--accent);
+      background: var(--bg-2);
+      border: 1px solid var(--accent-border);
+      border-radius: 4px;
+      padding: 1px 4px; text-align: center; outline: none;
+    }
+    .offset-input:focus { border-color: var(--accent); }
     .offset-slider-row {
       display: flex; align-items: center; gap: 8px;
       padding: 0 0 6px;
@@ -562,6 +645,14 @@
     .tuto-title { font-size: 12px; font-weight: 600; color: var(--text-0); margin-bottom: 6px; line-height: 1.4; }
     .tuto-sub { font-size: 11px; color: var(--text-1); line-height: 1.7; margin-top: 4px; }
     .tuto-sub strong { color: var(--text-0); font-weight: 600; }
+    .tuto-warn {
+      display: flex; gap: 6px; align-items: flex-start;
+      margin-top: 4px; margin-bottom: 12px; padding: 6px 8px;
+      background: var(--accent-glow); border: 1px solid var(--accent-border);
+      border-radius: 6px;
+      font-size: 10.5px; color: var(--text-1); line-height: 1.45;
+    }
+    .tuto-warn-icon { flex-shrink: 0; color: var(--accent); font-weight: 700; }
     .copy-hint {
       font-family: 'Space Mono', monospace;
       font-size: 10px; color: var(--text-2); margin-top: 4px; letter-spacing: 0.02em;
@@ -578,32 +669,32 @@
     }
   </style>
 </head>
-<body>
+<body class="light">
 
   <div class="header">
     <img src="icon.svg" alt="" class="header-logo" />
     <span class="logo">StreamSync</span>
-    <span class="version">v3.0</span>
+    <span class="version" id="ext-version"></span>
   </div>
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab active" data-tab="home">Accueil</button>
-    <button class="tab" data-tab="settings">Paramètres</button>
+    <button class="tab active" data-tab="home" data-i18n="tabs.home">Accueil</button>
+    <button class="tab" data-tab="settings" data-i18n="tabs.settings">Paramètres</button>
   </div>
 
   <!-- ═══ HOME ═══ -->
   <div class="panel active" id="panel-home">
 
     <div id="now-playing">
-      <div class="np-idle" id="np-idle">Ouvre une VOD Twitch pour commencer</div>
+      <div class="np-idle" id="np-idle" data-i18n="np.idle">Ouvre une rediffusion Twitch pour commencer</div>
     </div>
 
     <div class="sep"></div>
 
     <div id="tracklist-section" style="display:none">
       <div class="tracklist-header">
-        <div class="label" style="margin-bottom:0">Morceaux du VOD</div>
+        <div class="label" style="margin-bottom:0" data-i18n="tracklist.title">Morceaux de la rediffusion</div>
         <span class="tracklist-count" id="tracklist-count"></span>
       </div>
       <div class="tracklist" id="tracklist"></div>
@@ -612,7 +703,7 @@
     <div class="sep" id="tracklist-sep" style="display:none"></div>
 
     <div class="section">
-      <div class="label">Lecteur audio</div>
+      <div class="label" data-i18n="player.label">Lecteur audio</div>
       <div class="player-switch" id="player-switch">
         <button class="player-opt active" data-player="spotify">
           <img src="spotify-logo.svg" width="11" height="11" alt="" />
@@ -630,10 +721,10 @@
     <div class="sep"></div>
 
     <div class="section" id="yt-info-section" style="display:none">
-      <div class="label">YouTube</div>
+      <div class="label" data-i18n="yt.label">YouTube</div>
       <div class="yt-info">
-        Le lecteur YouTube s'affiche en bas à droite du VOD.<br>
-        Clique sur <strong>Activer le son</strong> à la première lecture (Chrome bloque l'audio auto).
+        <span data-i18n="yt.info1">Le lecteur YouTube s'affiche en bas à droite de la rediffusion.</span><br>
+        <span id="yt-info2-placeholder"></span>
       </div>
     </div>
 
@@ -641,11 +732,11 @@
 
     <div class="section" id="devices-section">
       <div class="devices-header">
-        <div class="label" style="margin-bottom:0">Appareil de lecture</div>
-        <button class="btn-refresh" id="btn-refresh-devices" title="Actualiser">↻</button>
+        <div class="label" style="margin-bottom:0" data-i18n="devices.label">Appareil de lecture</div>
+        <button class="btn-refresh" id="btn-refresh-devices" data-i18n-attr="title:devices.refresh" title="Actualiser">↻</button>
       </div>
       <div class="device-list" id="device-list">
-        <div class="devices-empty">Ouvre Spotify sur un appareil</div>
+        <div class="devices-empty" data-i18n="devices.empty.title">Ouvre Spotify sur un appareil</div>
       </div>
     </div>
 
@@ -655,11 +746,11 @@
   <div class="panel" id="panel-settings">
 
     <div class="section" style="padding-bottom:0">
-      <div class="label">Lecture</div>
+      <div class="label" data-i18n="settings.playback">Lecture</div>
       <div class="setting-row">
         <div class="setting-info">
-          <div class="setting-name">Lecture automatique</div>
-          <div class="setting-desc">Lance le lecteur automatiquement en regardant une VOD</div>
+          <div class="setting-name" data-i18n="settings.autoplay.name">Lecture automatique</div>
+          <div class="setting-desc" data-i18n="settings.autoplay.desc">Lance le lecteur automatiquement en regardant une rediffusion</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="toggle-autoplay" checked />
@@ -670,23 +761,24 @@
 
       <div class="setting-row" style="padding-bottom:0">
         <div class="setting-info">
-          <div class="setting-name">Décalage audio</div>
-          <div class="setting-desc">Compense le délai du stream</div>
+          <div class="setting-name" data-i18n="settings.offset.name">Décalage audio</div>
+          <div class="setting-desc" data-i18n="settings.offset.desc">Compense le délai du stream</div>
         </div>
         <div class="offset-control">
-          <span class="offset-value" id="offset-value">+3.0s</span>
+          <span class="offset-value" id="offset-value" data-i18n-attr="title:settings.offset.tooltip" title="Cliquer pour saisir une valeur">+3.0s</span>
+          <input type="text" class="offset-input" id="offset-input" inputmode="decimal" maxlength="6" hidden />
         </div>
       </div>
       <div class="offset-slider-row">
         <span class="offset-bound">-5s</span>
-        <input type="range" id="offset-slider" min="-5000" max="15000" step="500" value="3000" />
+        <input type="range" id="offset-slider" min="-5000" max="15000" step="100" value="3000" />
         <span class="offset-bound">+15s</span>
       </div>
 
       <div class="setting-row">
         <div class="setting-info">
-          <div class="setting-name">Notifications de morceau</div>
-          <div class="setting-desc">Affiche une notification desktop à chaque changement de track</div>
+          <div class="setting-name" data-i18n="settings.notifs.name">Notifications de morceau</div>
+          <div class="setting-desc" data-i18n="settings.notifs.desc">Affiche une notification desktop à chaque changement de track</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="toggle-notifications" />
@@ -695,13 +787,25 @@
         </label>
       </div>
 
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name" data-i18n="settings.tracklist.name">Tracklist de la rediffusion</div>
+          <div class="setting-desc" data-i18n="settings.tracklist.desc">Affiche la liste des morceaux joués pendant le live dans le popup</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-tracklist" />
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+
       <div class="sep" style="margin: 2px 0"></div>
 
-      <div class="label" style="margin-top:12px">Apparence</div>
+      <div class="label" style="margin-top:12px" data-i18n="settings.appearance">Apparence</div>
       <div class="setting-row" style="padding-top:0">
         <div class="setting-info">
-          <div class="setting-name">Thème clair</div>
-          <div class="setting-desc">Bascule entre le mode sombre et le mode clair</div>
+          <div class="setting-name" data-i18n="settings.theme.name">Thème clair</div>
+          <div class="setting-desc" data-i18n="settings.theme.desc">Bascule entre le mode sombre et le mode clair</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="toggle-theme" />
@@ -709,30 +813,41 @@
           <div class="toggle-thumb"></div>
         </label>
       </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-name" data-i18n="settings.lang.name">Langue</div>
+          <div class="setting-desc" data-i18n="settings.lang.desc">Change la langue de l'extension</div>
+        </div>
+        <select id="lang-select" class="lang-select">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
+      </div>
     </div>
 
     <div class="sep" style="margin: 0 16px"></div>
 
     <div class="section" id="spotify-section">
-      <div class="label">Spotify</div>
+      <div class="label" data-i18n="spotify.label">Spotify</div>
       <div class="status-row">
-        <span class="status-label">Statut</span>
-        <span id="spotify-badge" class="badge-disconnected">Non connecté</span>
+        <span class="status-label" data-i18n="spotify.status">Statut</span>
+        <span id="spotify-badge" class="badge-disconnected" data-i18n="spotify.disconnected">Non connecté</span>
       </div>
-      <button class="btn-ghost" id="btn-disconnect" style="display:none">Déconnecter</button>
+      <button class="btn-ghost" id="btn-disconnect" data-i18n="spotify.disconnect" style="display:none">Déconnecter</button>
     </div>
 
     <div class="sep" style="margin: 0 16px" id="spotify-config-sep"></div>
 
     <div class="section" style="padding-bottom:18px" id="spotify-config-section">
-      <div class="label">Configuration Spotify</div>
+      <div class="label" data-i18n="spotify.configTitle">Configuration Spotify</div>
 
       <div class="tuto-step">
         <div class="tuto-num">1</div>
         <div class="tuto-body">
-          <div class="tuto-title">Copie cette Redirect URI</div>
-          <div class="redirect-box" id="redirect-uri" title="Cliquer pour copier">…</div>
-          <div class="copy-hint">↑ Clique pour copier</div>
+          <div class="tuto-title" data-i18n="spotify.step1.title">Copie cette Redirect URI</div>
+          <div class="redirect-box" id="redirect-uri" data-i18n-attr="title:spotify.step1.tooltip" title="Cliquer pour copier">…</div>
+          <div class="copy-hint" data-i18n="spotify.step1.hint">↑ Clique pour copier</div>
         </div>
       </div>
 
@@ -742,10 +857,10 @@
         <div class="tuto-num">2</div>
         <div class="tuto-body">
           <div class="tuto-title">
-            Crée une app sur<br>
+            <span data-i18n="spotify.step2.title.part1">Crée une app sur</span><br>
             <a href="https://developer.spotify.com/dashboard" target="_blank" class="link">developer.spotify.com/dashboard</a>
           </div>
-          <div class="tuto-sub">
+          <div class="tuto-sub" data-i18n-html="spotify.step2.sub.html">
             → Clique <strong>Create app</strong><br>
             → Nom : StreamSync (ou autre)<br>
             → Redirect URI : colle l'URI du dessus<br>
@@ -759,16 +874,20 @@
       <div class="tuto-step">
         <div class="tuto-num">3</div>
         <div class="tuto-body">
-          <div class="tuto-title">Entre ton Client ID</div>
-          <div class="tuto-sub" style="margin-bottom:8px">
-            Dans ton app Spotify → <strong>Settings</strong> → copie le <strong>Client ID</strong>
+          <div class="tuto-title" data-i18n="spotify.step3.title">Entre ton Client ID</div>
+          <div class="tuto-sub" style="margin-bottom:8px" data-i18n-html="spotify.step3.sub.html">
+            Sur la page de l'app que tu viens de créer (<a href="https://developer.spotify.com/dashboard" target="_blank" class="link">Dashboard</a>) → <strong>Settings</strong> → copie le <strong>Client ID</strong>
+          </div>
+          <div class="tuto-warn">
+            <span class="tuto-warn-icon">⚠</span>
+            <span data-i18n="spotify.step3.warn">Pas dans l'appli de musique Spotify : il s'agit de l'app dev créée à l'étape 2.</span>
           </div>
           <div class="input-row">
-            <input type="text" id="clientId" placeholder="Client ID Spotify" />
+            <input type="text" id="clientId" data-i18n-attr="placeholder:spotify.clientId.placeholder" placeholder="Client ID Spotify" />
           </div>
           <button class="btn btn-full" id="btn-connect" style="margin-top:10px">
             <img src="spotify-logo.svg" width="12" height="12" alt="" />
-            Connecter Spotify
+            <span data-i18n="spotify.connect">Connecter Spotify</span>
           </button>
           <div class="error-msg" id="connect-error"></div>
         </div>
@@ -778,10 +897,12 @@
   </div>
 
   <footer class="footer">
-    Fait par <a href="https://www.twitch.tv/valtiks_" target="_blank" class="link">Valtiks</a>
-    · <a href="https://streamsync.fr/?feedback" target="_blank" class="link">Feedback</a>
+    <span data-i18n="footer.madeBy">Fait par</span> <a href="https://www.twitch.tv/valtiks_" target="_blank" class="link">Valtiks</a>
+    · <a href="https://streamsync.fr/?feedback" target="_blank" class="link" data-i18n="footer.feedback">Feedback</a>
   </footer>
 
+  <script src="i18n/locales.js"></script>
+  <script src="i18n/i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

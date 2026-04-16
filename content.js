@@ -1,10 +1,15 @@
 // StreamSync - Content Script
-// Injecté sur https://www.twitch.tv/videos/*
+// Injecté sur https://www.twitch.tv/videos/* et https://player.twitch.tv/?...&video=...
 // Le viewer choisit son lecteur (Spotify ou YouTube) dans le popup, ce script
 // orchestre la timeline VOD et envoie les commandes au lecteur sélectionné.
 
 (function () {
   'use strict';
+
+  // ─── i18n (helper court pour les labels UI du lecteur YT) ────────────────────
+  const i18n = self.SS_I18N;
+  i18n?.loadLang();
+  const _t = (key, vars) => (i18n ? i18n.t(key, vars) : key);
 
   // ─── État ────────────────────────────────────────────────────────────────────
   let timeline = [];
@@ -16,6 +21,10 @@
   let lastPlayedOffsetBucket = -1;
   let audioOffsetMs = 3000; // Délai stream par défaut (3s)
   const albumArtCache = {}; // trackUri → imageUrl | null
+
+  // URI spéciale insérée par le tracker backend quand le streamer met Spotify
+  // en pause pendant le live. Signifie "pas de musique pendant ce segment".
+  const PAUSE_TRACK_URI = 'streamsync:pause';
 
   function ctxOk() {
     try { return !!chrome.runtime?.id; } catch (e) { return false; }
@@ -103,13 +112,18 @@
   // Création paresseuse de l'iframe au premier play. Le viewer doit cliquer une
   // fois sur "Activer le son" car Chrome bloque l'audio auto dans les iframes.
 
-  function createYoutubePlayer() {
+  function createYoutubePlayer({ onRefresh } = {}) {
     const CONTAINER_ID = 'streamsync-yt-container';
     let iframe = null;
     let iframeReady = false;
     let currentVideoId = null;
     let pendingCmd = null; // { videoId, startSec } en attente du load
+    let building = false; // évite double-build pendant le await storage
     const localCache = {}; // mémoire process : trackUri → videoId
+    // Refs pour cleanup propre (destroy → loadPlayer rebuild ne doit pas leak)
+    const windowListeners = []; // { type, fn }
+    let volumeRafId = null;
+    let pendingVolume = null;
 
     // Position/taille par défaut + clamp pour rester dans la viewport
     const DEFAULT_LAYOUT = { left: null, top: null, width: 280 }; // null = bottom-right
@@ -188,11 +202,14 @@
           <span style="white-space:nowrap">StreamSync</span>
         </span>
         <div id="streamsync-yt-vol" style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end;cursor:default" data-no-drag="1">
-          <button id="streamsync-yt-mute" type="button" title="Muet" style="background:transparent;border:0;color:#eaedf6;cursor:pointer;padding:2px;display:flex;align-items:center;opacity:0.85;transition:opacity 0.15s">
+          <button id="streamsync-yt-mute" type="button" title="${_t('yt.mute')}" style="background:transparent;border:0;color:#eaedf6;cursor:pointer;padding:2px;display:flex;align-items:center;opacity:0.85;transition:opacity 0.15s">
             <svg id="streamsync-yt-vol-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
           </button>
           <input id="streamsync-yt-vol-slider" type="range" min="0" max="100" value="80" style="width:80px;height:3px;-webkit-appearance:none;appearance:none;background:rgba(255,255,255,0.15);border-radius:2px;outline:none;cursor:pointer" />
-          <button id="streamsync-yt-collapse" type="button" title="Réduire" style="background:transparent;border:0;color:#eaedf6;cursor:pointer;padding:2px;display:flex;align-items:center;opacity:0.6;transition:opacity 0.15s;margin-left:2px">
+          <button id="streamsync-yt-refresh" type="button" title="${_t('yt.refresh')}" style="background:transparent;border:0;color:#eaedf6;cursor:pointer;padding:2px;display:flex;align-items:center;opacity:0.6;transition:opacity 0.15s;margin-left:2px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+          </button>
+          <button id="streamsync-yt-collapse" type="button" title="${_t('yt.collapse')}" style="background:transparent;border:0;color:#eaedf6;cursor:pointer;padding:2px;display:flex;align-items:center;opacity:0.6;transition:opacity 0.15s;margin-left:2px">
             <svg id="streamsync-yt-collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H5v-2h14v2z"/></svg>
           </button>
         </div>
@@ -211,22 +228,36 @@
         </style>
       `;
 
-      // Iframe vide → on charge le premier morceau via postMessage(loadVideoById)
-      iframe = document.createElement('iframe');
-      iframe.id = 'streamsync-yt-iframe';
-      iframe.src = 'https://www.youtube.com/embed/?enablejsapi=1&autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&playsinline=1';
-      iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-      iframe.style.cssText = `
-        display: block;
-        width: 100%;
-        aspect-ratio: 16 / 9;
-        border: 0;
-      `;
+      // Iframe vide → on charge le premier morceau via postMessage(loadVideoById).
+      // Factorisé pour permettre au bouton "refresh" de la recréer sans toucher
+      // au container (garde layout, volume, collapsed state).
+      function makeIframeEl() {
+        const ifr = document.createElement('iframe');
+        ifr.id = 'streamsync-yt-iframe';
+        ifr.src = 'https://www.youtube.com/embed/?enablejsapi=1&autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&playsinline=1';
+        ifr.allow = 'autoplay; encrypted-media; picture-in-picture';
+        ifr.style.cssText = `
+          display: ${collapsed ? 'none' : 'block'};
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          border: 0;
+        `;
+        ifr.addEventListener('load', () => {
+          iframeReady = true;
+          if (pendingCmd) {
+            const { videoId, startSec } = pendingCmd;
+            pendingCmd = null;
+            loadVideo(videoId, startSec);
+          }
+        });
+        return ifr;
+      }
+      iframe = makeIframeEl();
 
       // Bouton "Activer le son" (Chrome bloque l'audio auto en iframe)
       const unmuteBtn = document.createElement('button');
       unmuteBtn.id = 'streamsync-yt-unmute';
-      unmuteBtn.textContent = '🔊 Activer le son';
+      unmuteBtn.textContent = `🔊 ${_t('yt.unmute.btn')}`;
       unmuteBtn.style.cssText = `
         display: block;
         width: 100%;
@@ -267,21 +298,41 @@
         volIcon.innerHTML = `<path d="${path}"/>`;
       }
 
+      // Courbe perceptuelle : l'oreille humaine perçoit le volume de manière
+      // logarithmique, un slider linéaire "sonne" trop fort dès les petites
+      // valeurs. Quadratique donne une progression bien plus naturelle (un
+      // slider à 10 sort vraiment faible, 50 est un volume moyen, 100 max).
+      function toYtVolume(slider) {
+        return Math.round((slider * slider) / 100);
+      }
+
       // Helper unmute : utilisé par le bouton overlay, le slider, et le mute btn.
       // Tout interaction avec ces 3 contrôles compte comme user gesture pour
       // Chrome → on peut activer le son et virer l'overlay "Activer le son"
       function activateAudio() {
         muted = false;
         postCmd('unMute');
-        postCmd('setVolume', [currentVolume]);
+        postCmd('setVolume', [toYtVolume(currentVolume)]);
         updateVolIcon();
         unmuteBtn?.remove();
       }
 
+      // Throttle rAF : sur un drag rapide, le slider 'input' peut tirer 60+/s.
+      // Chaque postCmd = JSON.stringify + postMessage cross-origin → on
+      // coalesce sur la dernière valeur via requestAnimationFrame.
+      function flushVolume() {
+        volumeRafId = null;
+        if (pendingVolume === null) return;
+        postCmd('setVolume', [pendingVolume]);
+        pendingVolume = null;
+      }
       slider.addEventListener('input', e => {
         currentVolume = Number(e.target.value);
         if (currentVolume > 0 && muted) activateAudio();
-        else postCmd('setVolume', [currentVolume]);
+        else {
+          pendingVolume = toYtVolume(currentVolume);
+          if (volumeRafId === null) volumeRafId = requestAnimationFrame(flushVolume);
+        }
         updateVolIcon();
       });
       slider.addEventListener('change', () => {
@@ -315,7 +366,7 @@
         unavailable.style.display = collapsed ? 'none' : (unavailable.dataset.shown === '1' ? 'flex' : 'none');
         resizeHandle.style.display = visible;
         collapseIcon.innerHTML = collapsed ? ICON_EXPAND : ICON_COLLAPSE;
-        collapseBtn.title = collapsed ? 'Agrandir' : 'Réduire';
+        collapseBtn.title = collapsed ? _t('yt.expand') : _t('yt.collapse');
       }
 
       collapseBtn.addEventListener('click', () => {
@@ -350,7 +401,7 @@
           <circle cx="12" cy="12" r="10"/>
           <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
         </svg>
-        <div style="font-size:11px;font-weight:700;color:#ff9a76;letter-spacing:0.04em;text-transform:uppercase">Pas de version YouTube</div>
+        <div style="font-size:11px;font-weight:700;color:#ff9a76;letter-spacing:0.04em;text-transform:uppercase">${_t('yt.unavailable')}</div>
         <div id="streamsync-yt-unavailable-track" style="font-size:11px;color:#7a82a6;line-height:1.4;max-width:280px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical"></div>
       `;
       container.appendChild(unavailable);
@@ -406,6 +457,7 @@
       };
       window.addEventListener('mousemove', onDragMove);
       window.addEventListener('mouseup', onDragEnd);
+      windowListeners.push({ type: 'mousemove', fn: onDragMove }, { type: 'mouseup', fn: onDragEnd });
 
       // ─── Resize du modal via la poignée bas-droite ─────────────────────────
       let resizeStart = null;
@@ -438,15 +490,40 @@
       };
       window.addEventListener('mousemove', onResizeMove);
       window.addEventListener('mouseup', onResizeEnd);
+      windowListeners.push({ type: 'mousemove', fn: onResizeMove }, { type: 'mouseup', fn: onResizeEnd });
 
-      iframe.addEventListener('load', () => {
-        iframeReady = true;
-        // Si une commande de play est en attente, on la flushe maintenant
-        if (pendingCmd) {
-          const { videoId, startSec } = pendingCmd;
-          pendingCmd = null;
-          loadVideo(videoId, startSec);
+      // ─── Bouton refresh ────────────────────────────────────────────────────
+      // Recrée l'iframe dans le même container (layout/volume/collapsed
+      // préservés) et notifie l'orchestrateur pour resync la piste courante.
+      const refreshBtn = header.querySelector('#streamsync-yt-refresh');
+      refreshBtn.addEventListener('mouseenter', () => { refreshBtn.style.opacity = '1'; });
+      refreshBtn.addEventListener('mouseleave', () => { refreshBtn.style.opacity = '0.6'; });
+      refreshBtn.addEventListener('click', () => {
+        // Petite rotation visuelle pour feedback
+        refreshBtn.firstElementChild?.animate(
+          [{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }],
+          { duration: 500, easing: 'ease-out' }
+        );
+        const wasUnmuted = !muted;
+        const next = iframe.nextSibling;
+        const parent = iframe.parentNode;
+        iframe.remove();
+        iframe = null;
+        iframeReady = false;
+        currentVideoId = null;
+        pendingCmd = null;
+        iframe = makeIframeEl();
+        if (next) parent.insertBefore(iframe, next);
+        else parent.appendChild(iframe);
+        // Nouvelle iframe = src avec mute=1, donc démarre muette.
+        // Si l'user avait activé l'audio avant refresh, on le restaure au load.
+        if (wasUnmuted) {
+          iframe.addEventListener('load', () => {
+            postCmd('unMute');
+            postCmd('setVolume', [toYtVolume(currentVolume)]);
+          }, { once: true });
         }
+        if (typeof onRefresh === 'function') onRefresh();
       });
     }
 
@@ -458,13 +535,15 @@
     let collapsed = false;
 
     function ensureIframe() {
-      if (iframe) return;
+      if (iframe || building) return;
+      building = true;
       // storageGet wrappe déjà try/catch et retourne {} si le contexte est mort
       storageGet(['ss_yt_layout', 'ss_yt_volume', 'ss_yt_collapsed']).then(({ ss_yt_layout, ss_yt_volume, ss_yt_collapsed }) => {
         if (ss_yt_layout) currentLayout = { ...DEFAULT_LAYOUT, ...ss_yt_layout };
         if (typeof ss_yt_volume === 'number') currentVolume = Math.max(0, Math.min(100, ss_yt_volume));
         currentCollapsed = !!ss_yt_collapsed;
         buildIframeUI();
+        building = false;
       });
     }
 
@@ -551,7 +630,13 @@
 
     return {
       name: 'youtube',
-      async init() {},
+      async init() {
+        // Build l'iframe tout de suite pour que le lecteur soit visible
+        // même avant le premier play (ex: viewer qui arrive sur un timecode
+        // pré-intro sans musique). Évite le cas "j'ai rafraîchi la page et
+        // le lecteur a disparu".
+        ensureIframe();
+      },
       isReady() { return true; },
       async play(track, offsetMs) {
         ensureIframe();
@@ -588,6 +673,14 @@
       },
       destroy() {
         document.getElementById(CONTAINER_ID)?.remove();
+        // Cleanup propre : la destroy peut être suivie d'un nouveau
+        // createYoutubePlayer (toggle player, change de langue) → sans ça, les
+        // mousemove/mouseup window s'empilent à chaque cycle.
+        windowListeners.forEach(({ type, fn }) => window.removeEventListener(type, fn));
+        windowListeners.length = 0;
+        if (loadSeekTimer) { clearTimeout(loadSeekTimer); loadSeekTimer = null; }
+        if (volumeRafId !== null) { cancelAnimationFrame(volumeRafId); volumeRafId = null; }
+        pendingVolume = null;
         iframe = null;
         iframeReady = false;
         currentVideoId = null;
@@ -603,10 +696,39 @@
     const choice = playerChoice || 'spotify';
 
     if (player) player.destroy();
-    player = choice === 'youtube' ? createYoutubePlayer() : createSpotifyPlayer();
+    if (choice === 'youtube') {
+      // onRefresh : le bouton refresh du lecteur YT demande à l'orchestrateur
+      // de relancer la piste courante après rebuild de l'iframe.
+      // Si la VOD est en pause, on ne joue rien : le play redémarrerait le son
+      // sans que l'user ait cliqué play. L'iframe reste vide jusqu'à la reprise.
+      player = createYoutubePlayer({
+        onRefresh: () => {
+          if (!videoEl || videoEl.paused) return;
+          const track = getCurrentTrack(videoEl.currentTime * 1000);
+          if (!track) return;
+          lastPlayedTrackUri = null; // bypass dedup
+          playTrack(track, true);
+        },
+      });
+    } else {
+      player = createSpotifyPlayer();
+    }
     await player.init();
     console.log(`[StreamSync] Player actif : ${player.name}`);
   }
+
+  // Quand l'user change la langue depuis le popup, on rebuilde le lecteur YT
+  // pour que tous les labels (tooltips, overlay "Pas de version YouTube", etc.)
+  // repassent par _t() avec la nouvelle langue.
+  i18n?.onLangChange?.(() => {
+    if (player?.name !== 'youtube') return;
+    loadPlayer().then(() => {
+      if (videoEl && !videoEl.paused) {
+        const track = getCurrentTrack(videoEl.currentTime * 1000);
+        if (track) { lastPlayedTrackUri = null; playTrack(track, true); }
+      }
+    });
+  });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ORCHESTRATION VOD
@@ -651,9 +773,14 @@
   }
 
   // ─── Extraction du video ID ───────────────────────────────────────────────────
+  // Supporte deux formats :
+  //   - VOD classique : https://www.twitch.tv/videos/2748835554
+  //   - Player popout : https://player.twitch.tv/?...&video=2748835554&...
   function extractVideoId(url) {
     const m = url.match(/twitch\.tv\/videos\/(\d+)/);
-    return m ? m[1] : null;
+    if (m) return m[1];
+    const pm = url.match(/player\.twitch\.tv\/[^#]*[?&]video=(\d+)/);
+    return pm ? pm[1] : null;
   }
 
   // ─── Attente du <video> ───────────────────────────────────────────────────────
@@ -742,11 +869,25 @@
   }
 
   // ─── Boucle principale (setInterval pour tourner même quand l'onglet est en arrière-plan) ──
+  // Filet de sécurité pause/play : certaines navigations SPA Twitch recréent
+  // le <video>, les events pause/play peuvent rater. Le loop détecte la
+  // transition et envoie la commande au lecteur.
+  let lastLoopPaused = null;
   function startLoop() {
     if (loopId) clearInterval(loopId);
+    lastLoopPaused = null;
 
     loopId = setInterval(() => {
       if (!ctxOk()) { stopExtension(); return; }
+
+      // Twitch peut recréer <video> (changement de qualité, ad, navigation SPA).
+      // On re-attache les listeners sur le nouvel élément sinon play/pause ratent.
+      const currentVideo = document.querySelector('video');
+      if (currentVideo && currentVideo !== videoEl) {
+        videoEl = currentVideo;
+        attachVideoListeners();
+        lastLoopPaused = null; // reset pour éviter une commande fantôme
+      }
 
       if (videoEl) {
         const posMs = videoEl.currentTime * 1000;
@@ -757,6 +898,22 @@
         if (track && isPlaying && player?.isReady() && track.track_uri !== lastPlayedTrackUri) {
           playTrack(track);
         }
+
+        // Segment de pause streamer : la timeline ne renvoie plus de track.
+        // On coupe le lecteur côté viewer pour refléter le silence du live.
+        if (!track && player?.isReady() && lastPlayedTrackUri) {
+          player.pause();
+          lastPlayedTrackUri = null;
+          lastPlayedOffsetBucket = -1;
+        }
+
+        // Fallback pause : si le loop voit la transition play→pause, on envoie
+        // la commande même si le listener 'pause' a raté. La reprise est gérée
+        // par l'event 'play' et la re-synchro automatique plus haut.
+        if (player?.isReady() && lastLoopPaused === false && !isPlaying) {
+          player.pause();
+        }
+        lastLoopPaused = !isPlaying;
 
         // Résout l'album art en arrière-plan (apparaît au tick suivant)
         if (track && !albumArtCache.hasOwnProperty(track.track_uri)) {
@@ -777,16 +934,19 @@
     } catch (e) { /* contexte invalidé */ }
   }
 
-  // Expose la timeline VOD au popup (lecture seule)
+  // Expose la timeline VOD au popup (lecture seule). On filtre les marqueurs
+  // de pause : la tracklist ne montre que les morceaux réellement joués.
   function writeTimeline(vodId, entries) {
     if (!ctxOk()) return;
     try {
-      const tracks = entries.map(e => ({
-        stream_position_ms: e.track_started_at_stream_ms,
-        track_uri: e.track_uri,
-        track_name: e.track_name,
-        artist_name: e.artist_name,
-      }));
+      const tracks = entries
+        .filter(e => e.track_uri !== PAUSE_TRACK_URI)
+        .map(e => ({
+          stream_position_ms: e.track_started_at_stream_ms,
+          track_uri: e.track_uri,
+          track_name: e.track_name,
+          artist_name: e.artist_name,
+        }));
       chrome.storage.local.set({ ss_timeline: { vodId, tracks, audioOffsetMs } });
     } catch (e) {}
   }
@@ -798,6 +958,14 @@
 
   // ─── Messages venant du popup (seek, next, prev) ──────────────────────────────
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    // PING : permet au popup de vérifier que le content script est bien injecté
+    // (cas "extension installée/rechargée alors que la VOD était déjà ouverte"
+    // → on invite l'user à F5 depuis le popup)
+    if (msg?.type === 'PING') {
+      sendResponse?.({ ok: true });
+      return;
+    }
+
     if (!videoEl) { sendResponse?.({ ok: false, error: 'no_video' }); return; }
 
     if (msg?.type === 'SEEK_TO_STREAM_POSITION') {
@@ -811,15 +979,17 @@
 
     if (msg?.type === 'SEEK_RELATIVE') {
       // direction: 'next' | 'prev'
+      // Les marqueurs de pause ne sont pas des cibles de navigation
+      const realTracks = timeline.filter(t => t.track_uri !== PAUSE_TRACK_URI);
       const adjustedMs = videoEl.currentTime * 1000 + audioOffsetMs;
       let target = null;
       if (msg.direction === 'next') {
-        target = timeline.find(t => t.track_started_at_stream_ms > adjustedMs + 1000);
+        target = realTracks.find(t => t.track_started_at_stream_ms > adjustedMs + 1000);
       } else {
         // Précédent : si on est à <3s du début du track courant, on remonte 2 morceaux ;
         // sinon on revient au début du track courant
         let current = null, prev = null;
-        for (const t of timeline) {
+        for (const t of realTracks) {
           if (t.track_started_at_stream_ms <= adjustedMs) { prev = current; current = t; }
           else break;
         }
@@ -850,14 +1020,43 @@
   }
 
   // ─── Calcul du track courant ──────────────────────────────────────────────────
+  // Sélection de l'entry "actif" à une position VOD donnée.
+  // Subtilité : après une pause, l'entry de reprise peut avoir un
+  // track_started_at_stream_ms < pause.stream_position_ms (ex: Song A pausée à
+  // 60s de progrès puis reprise 1min plus tard → started_at "remonte" avant
+  // la pause). On force donc une gate stricte sur stream_position_ms pour les
+  // entries qui suivent un marqueur de pause.
+  function pickCurrentEntry(adjustedMs) {
+    let current = null;
+    let hadPauseSince = false;
+    for (const entry of timeline) {
+      if (entry.track_uri === PAUSE_TRACK_URI) {
+        if (entry.stream_position_ms > adjustedMs) break;
+        current = entry;
+        hadPauseSince = true;
+        continue;
+      }
+      if (hadPauseSince) {
+        // Post-pause : l'entry doit avoir été réellement observée par le
+        // tracker avant le VOD time courant, pas juste "inférée via progrès"
+        if (entry.stream_position_ms > adjustedMs) continue;
+        current = entry;
+        hadPauseSince = false;
+      } else {
+        // Comportement historique : inférence backwards via started_at
+        if (entry.track_started_at_stream_ms <= adjustedMs) current = entry;
+        else break;
+      }
+    }
+    return current;
+  }
+
   function getCurrentTrack(posMs) {
     const adjustedMs = posMs + audioOffsetMs;
-    let current = null;
-    for (const entry of timeline) {
-      if (entry.track_started_at_stream_ms <= adjustedMs) current = entry;
-      else break;
-    }
+    const current = pickCurrentEntry(adjustedMs);
     if (!current) return null;
+    // Marqueur de pause : on remonte "pas de track actif" au lieu du marqueur
+    if (current.track_uri === PAUSE_TRACK_URI) return null;
     const next = getNextTrack(adjustedMs);
     const duration = next
       ? next.track_started_at_stream_ms - current.track_started_at_stream_ms
@@ -873,6 +1072,8 @@
 
   function getNextTrack(posMs) {
     for (const entry of timeline) {
+      // Les marqueurs de pause ne sont pas des "tracks" à afficher
+      if (entry.track_uri === PAUSE_TRACK_URI) continue;
       if (entry.track_started_at_stream_ms > posMs) return entry;
     }
     return null;

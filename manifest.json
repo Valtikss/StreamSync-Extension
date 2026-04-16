@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "StreamSync",
-  "version": "3.0",
-  "description": "Resynchronise la musique Spotify sur les VODs Twitch",
+  "version": "3.6",
+  "description": "Resynchronise la musique Spotify sur les rediffusions Twitch",
 
   "permissions": ["storage", "identity", "tabs", "notifications"],
 
   "host_permissions": [
     "https://www.twitch.tv/*",
+    "https://player.twitch.tv/*",
     "https://api.spotify.com/*",
     "https://accounts.spotify.com/*",
     "https://open.spotify.com/*",
@@ -19,8 +20,11 @@
 
   "content_scripts": [
     {
-      "matches": ["https://www.twitch.tv/videos/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://www.twitch.tv/videos/*",
+        "https://player.twitch.tv/*"
+      ],
+      "js": ["i18n/locales.js", "i18n/i18n.js", "content.js"],
       "run_at": "document_idle"
     }
   ],

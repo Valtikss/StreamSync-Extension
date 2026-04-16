@@ -1,7 +1,59 @@
+// ─── Version (lue depuis manifest.json) ───────────────────────────────────────
+
+document.getElementById('ext-version').textContent = `v${chrome.runtime.getManifest().version}`;
+
+// ─── i18n : charge la langue et applique les traductions statiques ────────────
+
+const i18n = self.SS_I18N;
+const t = (...args) => i18n.t(...args);
+
+// Applique les traductions dès que possible, puis post-paint aussi (au cas où
+// un élément serait ajouté après). On n'attend pas la promesse pour ne pas
+// bloquer le reste du script, mais on ré-applique quand elle résout.
+i18n.loadLang().then(lang => {
+  i18n.applyI18n();
+  applyYoutubeInfo();
+  applyLangSelect(lang);
+});
+
+// L'info "Clique sur Activer le son..." contient un strong → on la construit
+// en JS pour que le placeholder varie avec la langue.
+function applyYoutubeInfo() {
+  const el = document.getElementById('yt-info2-placeholder');
+  if (!el) return;
+  el.innerHTML = t('yt.info2', { btn: `<strong>${t('yt.info.activate')}</strong>` });
+}
+
+function applyLangSelect(lang) {
+  const sel = document.getElementById('lang-select');
+  if (!sel) return;
+  sel.value = lang;
+  sel.addEventListener('change', e => {
+    const newLang = e.target.value;
+    chrome.storage.local.set({ lang: newLang }, () => {
+      // storage.onChanged met à jour currentLang côté i18n, on re-render tout
+      i18n.applyI18n();
+      applyYoutubeInfo();
+      // Re-render des sections dynamiques (elles reconstruisent leur innerHTML
+      // avec t() donc les strings sont retraduites)
+      renderNowPlaying();
+      renderTracklist();
+      chrome.storage.local.get(['spotify_access_token'], ({ spotify_access_token }) => {
+        setSpotifyStatus(!!spotify_access_token);
+      });
+      if (document.getElementById('devices-section').style.display !== 'none') {
+        loadDevices();
+      }
+    });
+  });
+}
+
 // ─── Thème dark/light ─────────────────────────────────────────────────────────
 
 chrome.storage.local.get(['theme'], ({ theme }) => {
-  const isLight = theme === 'light';
+  // Light par défaut : si l'user n'a jamais touché au toggle, on part en light.
+  // Seul theme === 'dark' explicite active le dark mode.
+  const isLight = theme !== 'dark';
   document.body.classList.toggle('light', isLight);
   document.getElementById('toggle-theme').checked = isLight;
 });
@@ -26,13 +78,15 @@ document.querySelectorAll('.tab').forEach(tab => {
 // ─── Chargement initial ────────────────────────────────────────────────────────
 
 chrome.storage.local.get(
-  ['spotifyClientId', 'spotify_access_token', 'selectedDeviceId', 'autoPlay', 'playerChoice', 'audioOffset', 'notificationsEnabled'],
+  ['spotifyClientId', 'spotify_access_token', 'selectedDeviceId', 'autoPlay', 'playerChoice', 'audioOffset', 'notificationsEnabled', 'tracklistEnabled'],
   result => {
     document.getElementById('clientId').value = result.spotifyClientId || '';
     // autoPlay activé par défaut si jamais défini
     document.getElementById('toggle-autoplay').checked = result.autoPlay !== false;
     // Notifications désactivées par défaut (opt-in)
     document.getElementById('toggle-notifications').checked = result.notificationsEnabled === true;
+    // Tracklist désactivée par défaut (opt-in, section jugée encombrante)
+    document.getElementById('toggle-tracklist').checked = result.tracklistEnabled === true;
     // Décalage audio : 3000ms par défaut
     const offset = typeof result.audioOffset === 'number' ? result.audioOffset : 3000;
     document.getElementById('offset-slider').value = offset;
@@ -99,11 +153,23 @@ document.getElementById('toggle-notifications').addEventListener('change', e => 
   chrome.storage.local.set({ notificationsEnabled: e.target.checked });
 });
 
+document.getElementById('toggle-tracklist').addEventListener('change', e => {
+  chrome.storage.local.set({ tracklistEnabled: e.target.checked }, () => {
+    renderTracklist();
+  });
+});
+
 // ─── Décalage audio (offset stream) ──────────────────────────────────────────
 
-document.getElementById('offset-slider').addEventListener('input', e => {
+const offsetSliderEl = document.getElementById('offset-slider');
+const offsetValueEl = document.getElementById('offset-value');
+const offsetInputEl = document.getElementById('offset-input');
+const OFFSET_MIN = parseInt(offsetSliderEl.min, 10);
+const OFFSET_MAX = parseInt(offsetSliderEl.max, 10);
+
+offsetSliderEl.addEventListener('input', e => {
   const ms = parseInt(e.target.value, 10);
-  document.getElementById('offset-value').textContent = formatOffset(ms);
+  offsetValueEl.textContent = formatOffset(ms);
   chrome.storage.local.set({ audioOffset: ms });
 });
 
@@ -113,12 +179,47 @@ function formatOffset(ms) {
   return `${sign}${s.toFixed(1)}s`;
 }
 
+// Saisie manuelle du décalage
+let cancelOffsetEdit = false;
+
+offsetValueEl.addEventListener('click', () => {
+  const currentS = parseInt(offsetSliderEl.value, 10) / 1000;
+  offsetInputEl.value = currentS.toFixed(1);
+  offsetValueEl.hidden = true;
+  offsetInputEl.hidden = false;
+  offsetInputEl.focus();
+  offsetInputEl.select();
+});
+
+function commitOffsetInput() {
+  if (!cancelOffsetEdit) {
+    const raw = offsetInputEl.value.trim().replace(',', '.').replace(/s$/i, '');
+    const s = parseFloat(raw);
+    if (!isNaN(s)) {
+      let ms = Math.round(s * 10) * 100; // snap 0.1s
+      ms = Math.min(OFFSET_MAX, Math.max(OFFSET_MIN, ms));
+      offsetSliderEl.value = ms;
+      offsetValueEl.textContent = formatOffset(ms);
+      chrome.storage.local.set({ audioOffset: ms });
+    }
+  }
+  cancelOffsetEdit = false;
+  offsetInputEl.hidden = true;
+  offsetValueEl.hidden = false;
+}
+
+offsetInputEl.addEventListener('blur', commitOffsetInput);
+offsetInputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); offsetInputEl.blur(); }
+  else if (e.key === 'Escape') { cancelOffsetEdit = true; offsetInputEl.blur(); }
+});
+
 const redirectUri = chrome.identity.getRedirectURL();
 const uriEl = document.getElementById('redirect-uri');
 uriEl.textContent = redirectUri;
 uriEl.addEventListener('click', () => {
   navigator.clipboard.writeText(redirectUri).then(() => {
-    uriEl.textContent = '✓ Copié !';
+    uriEl.textContent = t('spotify.copied');
     setTimeout(() => { uriEl.textContent = redirectUri; }, 1500);
   });
 });
@@ -188,8 +289,8 @@ function sendToVodTab(msg, cb) {
     const tab = tabs?.[0];
     if (!tab?.url || !VOD_URL_RE.test(tab.url)) {
       // Fallback : cherche un onglet VOD ailleurs
-      chrome.tabs.query({ url: 'https://www.twitch.tv/videos/*' }, otherTabs => {
-        const fallback = otherTabs?.[0];
+      chrome.tabs.query({ url: VOD_TAB_PATTERNS }, otherTabs => {
+        const fallback = (otherTabs || []).find(t => VOD_URL_RE.test(t.url || ''));
         if (!fallback) { cb?.({ ok: false, error: 'no_vod_tab' }); return; }
         chrome.tabs.sendMessage(fallback.id, msg, res => cb?.(res));
       });
@@ -274,7 +375,9 @@ function updateNowPlaying(track) {
   }
 }
 
-const VOD_URL_RE = /^https:\/\/www\.twitch\.tv\/videos\/\d+/;
+// VOD classique OU player popout (https://player.twitch.tv/?...&video=12345)
+const VOD_URL_RE = /^https:\/\/(?:www\.twitch\.tv\/videos\/\d+|player\.twitch\.tv\/[^#]*[?&]video=\d+)/;
+const VOD_TAB_PATTERNS = ['https://www.twitch.tv/videos/*', 'https://player.twitch.tv/*'];
 
 // Vérifie si l'onglet actif est sur une VOD Twitch
 function isOnVodTab(cb) {
@@ -287,8 +390,11 @@ function isOnVodTab(cb) {
 // Cherche un onglet VOD Twitch ouvert ailleurs (toutes fenêtres confondues).
 // Retourne le premier trouvé ou null.
 function findOtherVodTab(cb) {
-  chrome.tabs.query({ url: 'https://www.twitch.tv/videos/*' }, tabs => {
-    cb(tabs?.[0] || null);
+  chrome.tabs.query({ url: VOD_TAB_PATTERNS }, tabs => {
+    // Filtre client : le pattern player.twitch.tv/* peut matcher des pages
+    // live aussi, on garde uniquement celles qui ressemblent à une VOD.
+    const vod = (tabs || []).find(t => VOD_URL_RE.test(t.url || ''));
+    cb(vod || null);
   });
 }
 
@@ -296,12 +402,12 @@ function findOtherVodTab(cb) {
 function renderActiveTabBanner(container, tab) {
   // Streamer = segment de path après /videos/xxx — pas dispo direct, on prend
   // le titre de l'onglet (ex: "Twitch") ou un fallback générique
-  const label = tab.title?.replace(/ - Twitch$/, '') || 'un onglet VOD';
+  const label = tab.title?.replace(/ - Twitch$/, '') || t('np.other.fallback');
   let banner = container.querySelector('.np-active-tab');
   const html = `
     <div class="np-active-tab" data-tab-id="${tab.id}">
       <span class="np-active-dot"></span>
-      <span class="np-active-text">Actif sur <strong>${escapeHtml(label)}</strong></span>
+      <span class="np-active-text">${t('np.other', { label: `<strong>${escapeHtml(label)}</strong>` })}</span>
     </div>
   `;
   if (!banner) {
@@ -323,6 +429,46 @@ function removeActiveTabBanner(container) {
   if (banner) banner.remove();
 }
 
+// Cache du dernier état ping par tabId pour éviter le flash F5→normal
+// quand le content script répond entre deux ticks
+const pingCache = new Map();
+
+function pingContentScript(tab, cb) {
+  // Si la page n'est pas encore complètement chargée, on ne conclut rien :
+  // le content script s'injecte au document_idle, il peut arriver après
+  if (!tab || tab.status !== 'complete') { cb(true); return; }
+
+  const cached = pingCache.get(tab.id);
+  if (cached && Date.now() - cached.ts < 3000) { cb(cached.ok); return; }
+
+  try {
+    chrome.tabs.sendMessage(tab.id, { type: 'PING' }, resp => {
+      const ok = !chrome.runtime.lastError && !!resp?.ok;
+      pingCache.set(tab.id, { ok, ts: Date.now() });
+      cb(ok);
+    });
+  } catch (e) {
+    pingCache.set(tab.id, { ok: false, ts: Date.now() });
+    cb(false);
+  }
+}
+
+function renderF5Hint(container) {
+  removeActiveTabBanner(container);
+  if (container.querySelector('.np-f5-hint')) return;
+  container.innerHTML = `
+    <div class="np-f5-hint">
+      <span class="np-f5-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+        </svg>
+      </span>
+      <span>${t('np.f5hint.msg', { kbd: `<kbd>${t('np.f5hint.key')}</kbd>` })}</span>
+    </div>
+  `;
+}
+
 function renderNowPlaying() {
   isOnVodTab(onVod => {
     chrome.storage.local.get(['ss_now_playing', 'ss_vod_error'], ({ ss_now_playing: track, ss_vod_error: vodError }) => {
@@ -332,24 +478,34 @@ function renderNowPlaying() {
       if (!onVod) {
         findOtherVodTab(otherTab => {
           if (otherTab) {
-            // Une VOD tourne ailleurs : on garde l'affichage track/error et
-            // on ajoute une bannière cliquable pour focus l'onglet
-            renderTrackOrError(container, track, vodError);
-            renderActiveTabBanner(container, otherTab);
+            // Une VOD tourne ailleurs : ping + bannière cliquable
+            pingContentScript(otherTab, scriptOk => {
+              if (!scriptOk) { renderF5Hint(container); return; }
+              renderTrackOrError(container, track, vodError);
+              renderActiveTabBanner(container, otherTab);
+            });
           } else {
             // Aucune VOD ouverte nulle part : on nettoie le storage stale
             if (track || vodError) chrome.storage.local.set({ ss_now_playing: null, ss_vod_error: null, ss_timeline: null });
             removeActiveTabBanner(container);
             if (!container.querySelector('.np-idle') || container.querySelector('.np-error')) {
-              container.innerHTML = '<div class="np-idle">Ouvre une VOD Twitch pour commencer</div>';
+              container.innerHTML = `<div class="np-idle">${t('np.idle')}</div>`;
             }
           }
         });
         return;
       }
 
-      removeActiveTabBanner(container);
-      renderTrackOrError(container, track, vodError);
+      // Onglet courant = VOD : ping le content script pour savoir s'il est injecté.
+      // Pas injecté = extension installée/rechargée alors que la VOD était déjà
+      // ouverte → l'user doit F5 pour que le script tourne.
+      chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+        pingContentScript(tabs?.[0], scriptOk => {
+          if (!scriptOk) { renderF5Hint(container); return; }
+          removeActiveTabBanner(container);
+          renderTrackOrError(container, track, vodError);
+        });
+      });
     });
   });
 }
@@ -367,7 +523,7 @@ function renderTrackOrError(container, track, vodError) {
     }
     if (!container.querySelector('.np-idle') || container.querySelector('.np-error')) {
       const banner = container.querySelector('.np-active-tab');
-      container.innerHTML = (banner ? banner.outerHTML : '') + '<div class="np-idle">Ouvre une VOD Twitch pour commencer</div>';
+      container.innerHTML = (banner ? banner.outerHTML : '') + `<div class="np-idle">${t('np.idle')}</div>`;
     }
     return;
   }
@@ -395,13 +551,15 @@ let lastTracklistVodId = null;
 let lastCurrentUri = null;
 
 function renderTracklist() {
-  chrome.storage.local.get(['ss_timeline', 'ss_now_playing'], ({ ss_timeline, ss_now_playing }) => {
+  chrome.storage.local.get(['ss_timeline', 'ss_now_playing', 'tracklistEnabled'], ({ ss_timeline, ss_now_playing, tracklistEnabled }) => {
     const section = document.getElementById('tracklist-section');
     const sep = document.getElementById('tracklist-sep');
     const list = document.getElementById('tracklist');
     const count = document.getElementById('tracklist-count');
 
-    if (!ss_timeline?.tracks?.length) {
+    // Opt-in : par défaut la section est masquée, elle ne s'affiche que si
+    // l'user a coché le toggle dans les paramètres.
+    if (tracklistEnabled !== true || !ss_timeline?.tracks?.length) {
       section.style.display = 'none';
       sep.style.display = 'none';
       lastTracklistVodId = null;
@@ -410,7 +568,8 @@ function renderTracklist() {
 
     section.style.display = '';
     sep.style.display = '';
-    count.textContent = `${ss_timeline.tracks.length} morceaux`;
+    const nTracks = ss_timeline.tracks.length;
+    count.textContent = t(nTracks === 1 ? 'tracklist.count.one' : 'tracklist.count.many', { n: nTracks });
 
     const currentUri = ss_now_playing?.track_uri || null;
 
@@ -501,17 +660,17 @@ function vodErrorMessage(err) {
     case 'free_plan_limit': {
       const limit = err.data?.limit || 3;
       return username
-        ? `VOD non synchronisable. @${username} est sur le plan gratuit (limité aux ${limit} dernières sessions).`
-        : `VOD non synchronisable (plan gratuit du streamer, limité aux ${limit} dernières sessions).`;
+        ? `Rediffusion non synchronisable. @${username} est sur le plan gratuit (limité aux ${limit} dernières sessions).`
+        : `Rediffusion non synchronisable (plan gratuit du streamer, limité aux ${limit} dernières sessions).`;
     }
     case 'sub_only':
       return username
-        ? `VOD réservée aux abonnés de @${username}.`
-        : 'VOD réservée aux abonnés du streamer.';
+        ? `Rediffusion réservée aux abonnés de @${username}.`
+        : 'Rediffusion réservée aux abonnés du streamer.';
     case 'vod_not_found':
-      return 'VOD introuvable côté Twitch.';
+      return 'Rediffusion introuvable côté Twitch.';
     default:
-      return err.data?.message || 'Cette VOD n\'est pas synchronisable par StreamSync.';
+      return err.data?.message || 'Cette rediffusion n\'est pas synchronisable par StreamSync.';
   }
 }
 
@@ -565,18 +724,63 @@ document.getElementById('btn-disconnect').addEventListener('click', () => {
 
 // ─── Appareils Spotify ────────────────────────────────────────────────────────
 
-document.getElementById('btn-refresh-devices').addEventListener('click', loadDevices);
+document.getElementById('btn-refresh-devices').addEventListener('click', () => loadDevices());
+
+// Auto-retry tant que la liste est vide (l'app Spotify peut ne pas apparaître
+// tout de suite après l'ouverture : il faut souvent une interaction play/pause)
+let devicesRetryTimer = null;
+function scheduleDevicesRetry() {
+  if (devicesRetryTimer) clearTimeout(devicesRetryTimer);
+  devicesRetryTimer = setTimeout(() => loadDevices(), 6000);
+}
+function cancelDevicesRetry() {
+  if (devicesRetryTimer) { clearTimeout(devicesRetryTimer); devicesRetryTimer = null; }
+}
 
 function loadDevices() {
   const list = document.getElementById('device-list');
-  list.innerHTML = '<div class="devices-empty">Chargement…</div>';
+  list.innerHTML = `<div class="devices-empty">${t('devices.loading')}</div>`;
   showDevicesSection(true);
 
   chrome.runtime.sendMessage({ type: 'SPOTIFY_GET_DEVICES' }, res => {
-    if (!res?.ok || !res.devices?.length) {
-      list.innerHTML = '<div class="devices-empty">Ouvre Spotify sur un appareil</div>';
+    // Compte Spotify non-Premium : inutile d'essayer de lister les devices,
+    // l'API Connect ne fonctionne qu'avec Premium. On prévient l'user direct.
+    if (res?.ok && res.product && res.product !== 'premium') {
+      cancelDevicesRetry();
+      list.innerHTML = `
+        <div class="devices-free-warn">
+          <div class="devices-free-warn-icon">⚠</div>
+          <div class="devices-free-warn-body">
+            <div class="devices-free-warn-title">${t('devices.free.title')}</div>
+            <div class="devices-free-warn-desc">
+              ${t('devices.free.desc.html')}
+            </div>
+            <a href="https://www.spotify.com/premium" target="_blank" rel="noopener" class="devices-free-warn-cta">
+              ${t('devices.free.cta')}
+            </a>
+          </div>
+        </div>
+      `;
       return;
     }
+
+    if (!res?.ok || !res.devices?.length) {
+      list.innerHTML = `
+        <div class="devices-empty">
+          <div>${t('devices.empty.title')}</div>
+          <div class="devices-empty-hint">${t('devices.empty.hint')}</div>
+          <button type="button" class="btn-retry-devices" id="btn-retry-devices">
+            <span style="font-size:13px;line-height:1">↻</span>
+            <span>${t('devices.refresh')}</span>
+          </button>
+        </div>
+      `;
+      const retryBtn = document.getElementById('btn-retry-devices');
+      retryBtn?.addEventListener('click', () => loadDevices());
+      scheduleDevicesRetry();
+      return;
+    }
+    cancelDevicesRetry();
     chrome.storage.local.get(['selectedDeviceId'], ({ selectedDeviceId }) => {
       renderDevices(res.devices, selectedDeviceId);
     });
@@ -619,6 +823,8 @@ function deviceIcon(type) {
 function showDevicesSection(visible) {
   document.getElementById('devices-section').style.display = visible ? 'block' : 'none';
   document.getElementById('devices-sep').style.display = visible ? 'block' : 'none';
+  // Si on cache la section (ex: switch vers YouTube), on stoppe le retry
+  if (!visible) cancelDevicesRetry();
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -633,17 +839,19 @@ function setSpotifyStatus(connected) {
   document.getElementById('spotify-config-sep').style.display = connected ? 'none' : 'block';
 
   if (connected) {
-    badge.textContent = 'Connecté';
+    badge.setAttribute('data-i18n', 'spotify.connected');
+    badge.textContent = t('spotify.connected');
     badge.className = 'badge-connected';
     btnConnect.style.display = 'none';
     btnDisconnect.style.display = 'block';
   } else {
-    badge.textContent = 'Non connecté';
+    badge.setAttribute('data-i18n', 'spotify.disconnected');
+    badge.textContent = t('spotify.disconnected');
     badge.className = 'badge-disconnected';
     btnConnect.style.display = 'flex';
     btnConnect.innerHTML = `
       <img src="spotify-logo.svg" width="12" height="12" alt="" />
-      Connecter Spotify`;
+      ${t('spotify.connect')}`;
     btnDisconnect.style.display = 'none';
   }
 
