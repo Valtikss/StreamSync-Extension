@@ -438,6 +438,13 @@
       border-radius: 8px;
     }
     .yt-info strong { color: var(--accent); font-weight: 600; }
+    .yt-remount-status {
+      font-size: 10px; color: var(--text-2);
+      margin-top: 6px; min-height: 12px;
+      text-align: center; opacity: 0; transition: opacity 0.15s;
+    }
+    .yt-remount-status.shown { opacity: 1; }
+    .yt-remount-status.err { color: #ff6b4a; }
 
     /* ── Spotify status ── */
     .status-row { display: flex; align-items: center; justify-content: space-between; padding: 2px 0 10px; font-size: 12px; }
@@ -726,6 +733,8 @@
         <span data-i18n="yt.info1">Le lecteur YouTube s'affiche en bas à droite de la rediffusion.</span><br>
         <span id="yt-info2-placeholder"></span>
       </div>
+      <button class="btn-ghost" id="btn-yt-remount" style="margin-top:8px" data-i18n="yt.remount">Ré-afficher le lecteur</button>
+      <div class="yt-remount-status" id="yt-remount-status"></div>
     </div>
 
     <div class="sep" id="devices-sep" style="display:none"></div>

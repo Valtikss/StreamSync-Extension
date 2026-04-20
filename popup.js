@@ -143,6 +143,26 @@ function applyPlayerChoice(choice, spotifyConnected) {
   }
 }
 
+// ─── Bouton "Ré-afficher le lecteur" (fallback si le container YT a disparu) ──
+// Le patch auto-remount dans content.js couvre les cas courants, mais ce bouton
+// reste un échappatoire si Twitch trouve un nouveau moyen d'arracher le node.
+
+document.getElementById('btn-yt-remount').addEventListener('click', () => {
+  const statusEl = document.getElementById('yt-remount-status');
+  statusEl.classList.remove('err');
+  statusEl.textContent = t('yt.remount.sending');
+  statusEl.classList.add('shown');
+  sendToVodTab({ type: 'FORCE_YT_REMOUNT' }, res => {
+    if (res?.ok) {
+      statusEl.textContent = t('yt.remount.ok');
+    } else {
+      statusEl.classList.add('err');
+      statusEl.textContent = res?.error === 'no_vod_tab' ? t('yt.remount.err.noVod') : t('yt.remount.err.generic');
+    }
+    setTimeout(() => { statusEl.classList.remove('shown'); }, 2500);
+  });
+});
+
 // ─── Toggle lecture auto ───────────────────────────────────────────────────────
 
 document.getElementById('toggle-autoplay').addEventListener('change', e => {

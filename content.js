@@ -535,6 +535,22 @@
     let collapsed = false;
 
     function ensureIframe() {
+      // Twitch peut ré-render son DOM (changement de qualité, ad break, toggle
+      // theatre, navigation SPA sans URL change) et arracher notre container
+      // sans qu'on soit notifié. Sans ce check, la closure garde iframe!=null
+      // et l'early-return ci-dessous empêche toute reconstruction → lecteur
+      // fantôme. On détecte le détachement et on reset l'état.
+      if (iframe && !document.body.contains(iframe)) {
+        windowListeners.forEach(({ type, fn }) => window.removeEventListener(type, fn));
+        windowListeners.length = 0;
+        if (loadSeekTimer) { clearTimeout(loadSeekTimer); loadSeekTimer = null; }
+        if (volumeRafId !== null) { cancelAnimationFrame(volumeRafId); volumeRafId = null; }
+        pendingVolume = null;
+        iframe = null;
+        iframeReady = false;
+        currentVideoId = null;
+        pendingCmd = null;
+      }
       if (iframe || building) return;
       building = true;
       // storageGet wrappe déjà try/catch et retourne {} si le contexte est mort
@@ -637,6 +653,9 @@
         // le lecteur a disparu".
         ensureIframe();
       },
+      // Appelé par la boucle principale pour détecter un arrachage du container
+      // par un re-render Twitch et le remonter automatiquement.
+      ensureMounted() { ensureIframe(); },
       isReady() { return true; },
       async play(track, offsetMs) {
         ensureIframe();
@@ -890,6 +909,10 @@
       }
 
       if (videoEl) {
+        // Remount le lecteur YT si Twitch a arraché le container via un
+        // re-render SPA sans URL change (ad break, toggle theatre, etc.)
+        player?.ensureMounted?.();
+
         const posMs = videoEl.currentTime * 1000;
         const track = getCurrentTrack(posMs);
         const isPlaying = !videoEl.paused && !videoEl.ended;
@@ -964,6 +987,22 @@
     if (msg?.type === 'PING') {
       sendResponse?.({ ok: true });
       return;
+    }
+
+    // Force-remount du lecteur YT (bouton debug popup). On destroy le player
+    // courant et on rebuilde via loadPlayer ; si une piste est en cours on la
+    // relance pour que le viewer retrouve immédiatement son son.
+    if (msg?.type === 'FORCE_YT_REMOUNT') {
+      loadPlayer().then(() => {
+        if (videoEl && !videoEl.paused) {
+          const track = getCurrentTrack(videoEl.currentTime * 1000);
+          if (track) { lastPlayedTrackUri = null; playTrack(track, true); }
+        }
+        sendResponse?.({ ok: true });
+      }).catch(err => {
+        sendResponse?.({ ok: false, error: String(err?.message || err) });
+      });
+      return true; // réponse asynchrone
     }
 
     if (!videoEl) { sendResponse?.({ ok: false, error: 'no_video' }); return; }

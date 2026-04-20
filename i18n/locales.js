@@ -28,6 +28,11 @@
       'yt.info1': "Le lecteur YouTube s'affiche en bas à droite de la rediffusion.",
       'yt.info2': 'Clique sur {btn} à la première lecture (Chrome bloque l\'audio auto).',
       'yt.info.activate': 'Activer le son',
+      'yt.remount': 'Ré-afficher le lecteur',
+      'yt.remount.sending': 'Rechargement…',
+      'yt.remount.ok': '✓ Lecteur relancé',
+      'yt.remount.err.noVod': 'Aucune rediffusion détectée',
+      'yt.remount.err.generic': 'Échec du rechargement',
 
       // Devices
       'devices.label': 'Appareil de lecture',
@@ -119,6 +124,11 @@
       'yt.info1': 'The YouTube player appears at the bottom right of the VOD.',
       'yt.info2': 'Click {btn} on the first play (Chrome blocks auto-audio).',
       'yt.info.activate': 'Enable sound',
+      'yt.remount': 'Re-show the player',
+      'yt.remount.sending': 'Reloading…',
+      'yt.remount.ok': '✓ Player restarted',
+      'yt.remount.err.noVod': 'No VOD detected',
+      'yt.remount.err.generic': 'Reload failed',
 
       'devices.label': 'Playback device',
       'devices.refresh': 'Refresh',
