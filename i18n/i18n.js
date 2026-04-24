@@ -2,6 +2,11 @@
 // expose t()/applyI18n(), et réapplique sur changement de langue.
 
 (function (g) {
+  // Guard d'idempotence : re-injection possible via chrome.scripting (voir
+  // content.js). Sans guard, chaque injection ajoute un chrome.storage.onChanged
+  // listener supplémentaire dans la page.
+  if (g.SS_I18N) return;
+
   let currentLang = g.SS_DEFAULT_LANG || 'fr';
   const changeListeners = [];
 

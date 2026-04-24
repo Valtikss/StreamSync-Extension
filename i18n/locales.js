@@ -16,6 +16,12 @@
       'np.f5hint.key': 'F5',
       'np.other': 'Actif sur {label}',
       'np.other.fallback': 'un onglet de rediffusion',
+      'np.error.refreshHint': 'Tu viens de passer Pro ? Actualise la page (F5).',
+      'np.error.freePlanLimit': 'Ton plan gratuit est limité aux {limit} dernières sessions par streamer. Passe Pro Viewer pour accéder à toute la musique.',
+      'np.error.subOnly': 'Rediffusion réservée aux abonnés du streamer.',
+      'np.error.subOnlyNamed': 'Rediffusion réservée aux abonnés de @{username}.',
+      'np.error.vodNotFound': 'Rediffusion introuvable côté Twitch.',
+      'np.error.generic': 'Cette rediffusion n\'est pas synchronisable par StreamSync.',
 
       // Tracklist
       'tracklist.title': 'Morceaux de la rediffusion',
@@ -92,6 +98,20 @@
       'yt.expand': 'Agrandir',
       'yt.unavailable': 'Pas de version YouTube',
 
+      // Login gate (connexion obligatoire)
+      'gate.desc': 'Connecte-toi avec Twitch pour synchroniser la musique sur les rediffusions.',
+
+      // Compte StreamSync (auth Twitch via extension)
+      'account.label': 'Compte StreamSync',
+      'account.cta.desc': 'Connecte-toi avec Twitch pour accéder aux rediffusions illimitées avec un abonnement Pro Viewer.',
+      'account.login': 'Se connecter avec Twitch',
+      'account.loggingIn': 'Connexion…',
+      'account.logout': 'Se déconnecter',
+      'account.upgrade': 'Passer Pro Viewer',
+      'account.plan.free': 'Plan gratuit',
+      'account.plan.proViewer': 'Pro Viewer',
+      'account.plan.proStreamer': 'Pro Streamer',
+
       // Erreurs remontées depuis le service worker
       'err.clientIdMissing': 'Spotify Client ID non configuré dans le popup',
       'err.authCancelled': 'Auth annulée',
@@ -114,6 +134,12 @@
       'np.f5hint.key': 'F5',
       'np.other': 'Active on {label}',
       'np.other.fallback': 'a Twitch replay tab',
+      'np.error.refreshHint': 'Just upgraded to Pro? Refresh the page (F5).',
+      'np.error.freePlanLimit': 'Your free plan is limited to the last {limit} sessions per streamer. Upgrade to Pro Viewer to access all music.',
+      'np.error.subOnly': 'This replay is reserved for the streamer\'s subscribers.',
+      'np.error.subOnlyNamed': 'This replay is reserved for @{username} subscribers.',
+      'np.error.vodNotFound': 'Replay not found on Twitch.',
+      'np.error.generic': 'This replay can\'t be synced by StreamSync.',
 
       'tracklist.title': 'VOD tracklist',
       'tracklist.count.one': '{n} track',
@@ -182,6 +208,18 @@
       'yt.collapse': 'Minimize',
       'yt.expand': 'Expand',
       'yt.unavailable': 'No YouTube version',
+
+      'gate.desc': 'Sign in with Twitch to sync music on VODs.',
+
+      'account.label': 'StreamSync account',
+      'account.cta.desc': 'Sign in with Twitch to unlock unlimited VOD history with a Pro Viewer subscription.',
+      'account.login': 'Sign in with Twitch',
+      'account.loggingIn': 'Signing in…',
+      'account.logout': 'Sign out',
+      'account.upgrade': 'Upgrade to Pro Viewer',
+      'account.plan.free': 'Free plan',
+      'account.plan.proViewer': 'Pro Viewer',
+      'account.plan.proStreamer': 'Pro Streamer',
 
       'err.clientIdMissing': 'Spotify Client ID not set in the popup',
       'err.authCancelled': 'Auth cancelled',

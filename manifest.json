@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "StreamSync",
-  "version": "3.9",
+  "version": "4.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtfQMG5dazd74T6On1hiAfotBb9m7o5GptXjE74D5JQ9AzJYJFNzCt+mJbz5YgRuKaToIrO2QQD/wNcJ2xKrA58XLh/rJrymUiK0sQ3oOSUCd1m5bImfHttc2OTo1YyWtZCOdorvQfXEK171KbpSNMAPlHKaOVbDgA3j5m/cOjSH65ZBQ2BmId6puKTsFZNYCi9hnOe8mAxvGmHcmYMLVZEHNF/LMtWqKN6NSLflaeG0CCUt1S/4d3VYa4w4tQ54JaNqjI5QGWiZJ9XN3AP0adovIF5l6q49WavECAo9SDU+IhvVLJowZy/bldNDYCukXKSWTctbXzoy7TZtqKkqPeQIDAQAB",
   "description": "Resynchronise la musique Spotify sur les rediffusions Twitch",
 
-  "permissions": ["storage", "identity", "tabs", "notifications"],
+  "permissions": ["storage", "identity", "tabs", "notifications", "scripting"],
 
   "host_permissions": [
     "https://www.twitch.tv/*",

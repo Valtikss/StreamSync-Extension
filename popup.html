@@ -132,6 +132,18 @@
       line-height: 1.5;
       padding: 10px 4px;
     }
+    .np-error-cta {
+      display: inline-block; margin-top: 6px;
+      color: var(--accent); text-decoration: none; font-weight: 600;
+      font-size: 11px;
+    }
+    .np-error-cta:hover { text-decoration: underline; }
+    .np-error-hint {
+      margin-top: 10px; padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      font-size: 10px; color: var(--text-2); font-weight: 400;
+      line-height: 1.4;
+    }
     .np-f5-hint {
       display: flex; align-items: center; gap: 10px;
       padding: 10px 12px; margin: 2px 0;
@@ -460,6 +472,49 @@
       border-radius: 99px; padding: 2px 8px; font-size: 10px;
     }
 
+    /* ── Compte StreamSync ── */
+    .account-card {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px; margin-bottom: 8px;
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .account-avatar {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      background: var(--bg-3); object-fit: cover;
+    }
+    .account-info { flex: 1; min-width: 0; }
+    .account-name {
+      font-size: 12px; font-weight: 600; color: var(--text-0);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .account-plan {
+      font-size: 10px; margin-top: 2px;
+    }
+    .account-plan .badge-connected,
+    .account-plan .badge-disconnected { padding: 1px 6px; }
+    .account-actions { display: flex; gap: 6px; }
+    .account-actions .btn-ghost,
+    .account-actions .btn { flex: 1; padding: 7px 10px; font-size: 11px; }
+
+    /* ── Login gate (connexion obligatoire) ── */
+    /* Affiche UNIQUEMENT le gate quand non connecté ; tout le reste est masqué
+       tant que le viewer n'a pas de JWT valide. */
+    #login-gate { display: none; padding: 28px 24px 32px; text-align: center; }
+    body.ss-logged-out #login-gate { display: block; }
+    body.ss-logged-out .header,
+    body.ss-logged-out .tabs,
+    body.ss-logged-out .panel,
+    body.ss-logged-out .footer { display: none !important; }
+
+    .gate-logo { width: 40px; height: 40px; margin: 0 auto 14px; display: block; }
+    .gate-title { font-size: 15px; font-weight: 700; color: var(--text-0); margin-bottom: 6px; }
+    .gate-desc { font-size: 11.5px; color: var(--text-1); line-height: 1.55; margin-bottom: 18px; }
+    .gate-footer {
+      margin-top: 16px; font-size: 10px; color: var(--text-2);
+      font-family: 'Space Mono', monospace; letter-spacing: 0.03em;
+    }
+
     /* ── Inputs & buttons ── */
     .input-row { display: flex; gap: 6px; margin-bottom: 6px; }
     input[type="text"] {
@@ -678,6 +733,15 @@
 </head>
 <body class="light">
 
+  <!-- Login gate : visible uniquement quand body a la classe ss-logged-out -->
+  <div id="login-gate">
+    <img src="icon.svg" alt="" class="gate-logo" />
+    <div class="gate-title">StreamSync</div>
+    <div class="gate-desc" data-i18n="gate.desc">Connecte-toi avec Twitch pour synchroniser la musique sur les rediffusions.</div>
+    <button class="btn btn-full" id="btn-ss-login-gate" data-i18n="account.login">Se connecter avec Twitch</button>
+    <div class="gate-footer" id="gate-version"></div>
+  </div>
+
   <div class="header">
     <img src="icon.svg" alt="" class="header-logo" />
     <span class="logo">StreamSync</span>
@@ -753,6 +817,27 @@
 
   <!-- ═══ SETTINGS ═══ -->
   <div class="panel" id="panel-settings">
+
+    <!-- Compte StreamSync : uniquement visible quand connecté (sinon le user
+         voit le login-gate qui bloque tout le popup). -->
+    <div class="section" id="account-section" style="padding-bottom:0">
+      <div class="label" data-i18n="account.label">Compte StreamSync</div>
+      <div class="account-card">
+        <img class="account-avatar" id="account-avatar" alt="" />
+        <div class="account-info">
+          <div class="account-name" id="account-name"></div>
+          <div class="account-plan">
+            <span id="account-plan-badge" class="badge-disconnected" data-i18n="account.plan.free">Plan gratuit</span>
+          </div>
+        </div>
+      </div>
+      <div class="account-actions">
+        <button class="btn" id="btn-ss-upgrade" data-i18n="account.upgrade">Passer Pro Viewer</button>
+        <button class="btn-ghost" id="btn-ss-logout" data-i18n="account.logout">Se déconnecter</button>
+      </div>
+    </div>
+
+    <div class="sep" style="margin: 10px 16px"></div>
 
     <div class="section" style="padding-bottom:0">
       <div class="label" data-i18n="settings.playback">Lecture</div>

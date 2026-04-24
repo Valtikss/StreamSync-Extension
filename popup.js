@@ -489,6 +489,30 @@ function renderF5Hint(container) {
   `;
 }
 
+// Injection programmée du content script quand le PING échoue. Évite à
+// l'utilisateur d'avoir à F5 la page (onglet VOD ouvert avant installation,
+// extension rechargée, course au document_idle, etc.).
+// Les scripts eux-mêmes sont idempotents (cf. guards dans content.js et
+// i18n.js) donc une seconde injection sur un onglet déjà sain est sans effet.
+const injectingTabs = new Set();
+function tryInjectContentScript(tabId, cb) {
+  if (!chrome.scripting?.executeScript || !tabId) { cb(false); return; }
+  if (injectingTabs.has(tabId)) { cb(true); return; }
+  injectingTabs.add(tabId);
+  chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['i18n/locales.js', 'i18n/i18n.js', 'content.js'],
+  }, () => {
+    injectingTabs.delete(tabId);
+    const err = chrome.runtime.lastError;
+    if (err) { cb(false); return; }
+    // Invalide le cache pour que le prochain poll re-ping sans utiliser la
+    // réponse négative précédente (sinon le hint F5 clignoterait 3s).
+    pingCache.delete(tabId);
+    cb(true);
+  });
+}
+
 function renderNowPlaying() {
   isOnVodTab(onVod => {
     chrome.storage.local.get(['ss_now_playing', 'ss_vod_error'], ({ ss_now_playing: track, ss_vod_error: vodError }) => {
@@ -500,7 +524,17 @@ function renderNowPlaying() {
           if (otherTab) {
             // Une VOD tourne ailleurs : ping + bannière cliquable
             pingContentScript(otherTab, scriptOk => {
-              if (!scriptOk) { renderF5Hint(container); return; }
+              if (!scriptOk) {
+                // Tente d'injecter le content script dans l'onglet distant.
+                // Si ça passe, on affiche quand même la bannière : le prochain
+                // tick de polling (<1s) verra le script vivant.
+                tryInjectContentScript(otherTab.id, injected => {
+                  if (!injected) { renderF5Hint(container); return; }
+                  renderTrackOrError(container, track, vodError);
+                  renderActiveTabBanner(container, otherTab);
+                });
+                return;
+              }
               renderTrackOrError(container, track, vodError);
               renderActiveTabBanner(container, otherTab);
             });
@@ -518,10 +552,19 @@ function renderNowPlaying() {
 
       // Onglet courant = VOD : ping le content script pour savoir s'il est injecté.
       // Pas injecté = extension installée/rechargée alors que la VOD était déjà
-      // ouverte → l'user doit F5 pour que le script tourne.
+      // ouverte, ou course au document_idle. On tente d'injecter via
+      // chrome.scripting avant de rabattre sur le hint F5 en dernier recours.
       chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-        pingContentScript(tabs?.[0], scriptOk => {
-          if (!scriptOk) { renderF5Hint(container); return; }
+        const activeTab = tabs?.[0];
+        pingContentScript(activeTab, scriptOk => {
+          if (!scriptOk) {
+            tryInjectContentScript(activeTab?.id, injected => {
+              if (!injected) { renderF5Hint(container); return; }
+              removeActiveTabBanner(container);
+              renderTrackOrError(container, track, vodError);
+            });
+            return;
+          }
           removeActiveTabBanner(container);
           renderTrackOrError(container, track, vodError);
         });
@@ -533,11 +576,20 @@ function renderNowPlaying() {
 function renderTrackOrError(container, track, vodError) {
   if (!track) {
     if (vodError && vodError.code) {
-      const msg = vodErrorMessage(vodError);
-      const html = `<div class="np-idle np-error">${escapeHtml(msg)}</div>`;
-      if (!container.querySelector('.np-error') || container.querySelector('.np-error').textContent !== msg) {
+      const { msg, cta, hint } = vodErrorMessage(vodError);
+      const ctaHtml = cta
+        ? `<a class="np-error-cta" href="${cta.href}" target="_blank" rel="noopener">${escapeHtml(cta.label)} →</a>`
+        : '';
+      const hintHtml = hint
+        ? `<div class="np-error-hint">${escapeHtml(hint)}</div>`
+        : '';
+      const html = `<div class="np-idle np-error">${escapeHtml(msg)}${ctaHtml ? '<br>' + ctaHtml : ''}${hintHtml}</div>`;
+      const existingError = container.querySelector('.np-error');
+      if (!existingError || existingError.dataset.msg !== msg) {
         const banner = container.querySelector('.np-active-tab');
         container.innerHTML = (banner ? banner.outerHTML : '') + html;
+        const newErr = container.querySelector('.np-error');
+        if (newErr) newErr.dataset.msg = msg;
       }
       return;
     }
@@ -679,18 +731,22 @@ function vodErrorMessage(err) {
   switch (err.code) {
     case 'free_plan_limit': {
       const limit = err.data?.limit || 3;
-      return username
-        ? `Rediffusion non synchronisable. @${username} est sur le plan gratuit (limité aux ${limit} dernières sessions).`
-        : `Rediffusion non synchronisable (plan gratuit du streamer, limité aux ${limit} dernières sessions).`;
+      return {
+        msg: t('np.error.freePlanLimit', { limit }),
+        cta: { href: 'https://streamsync.fr/pricing', label: t('account.upgrade') },
+        hint: t('np.error.refreshHint'),
+      };
     }
     case 'sub_only':
-      return username
-        ? `Rediffusion réservée aux abonnés de @${username}.`
-        : 'Rediffusion réservée aux abonnés du streamer.';
+      return {
+        msg: username
+          ? t('np.error.subOnlyNamed', { username })
+          : t('np.error.subOnly'),
+      };
     case 'vod_not_found':
-      return 'Rediffusion introuvable côté Twitch.';
+      return { msg: t('np.error.vodNotFound') };
     default:
-      return err.data?.message || 'Cette rediffusion n\'est pas synchronisable par StreamSync.';
+      return { msg: err.data?.message || t('np.error.generic') };
   }
 }
 
@@ -906,3 +962,160 @@ function esc(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+// ─── Compte StreamSync ───────────────────────────────────────────────────────
+// Auth Twitch → JWT côté service-worker, UI synchronisée via chrome.storage.
+
+const SS_PRICING_URL = 'https://streamsync.fr/pricing';
+
+function renderAccount(state) {
+  // Login gate : visible dès que l'user n'est pas connecté. Le reste du popup
+  // est masqué via CSS (body.ss-logged-out).
+  if (!state || !state.user) {
+    document.body.classList.add('ss-logged-out');
+    const v = document.getElementById('gate-version');
+    if (v) v.textContent = `v${chrome.runtime.getManifest().version}`;
+    return;
+  }
+
+  document.body.classList.remove('ss-logged-out');
+
+  const { user, me } = state;
+  const avatar = document.getElementById('account-avatar');
+  const name = document.getElementById('account-name');
+  const badge = document.getElementById('account-plan-badge');
+  const upgradeBtn = document.getElementById('btn-ss-upgrade');
+
+  if (avatar) avatar.src = user.twitch_avatar_url || 'icons/icon48.png';
+  if (name) name.textContent = `@${user.twitch_username || '—'}`;
+
+  // Plan & badge : me peut être null si le fetch a échoué (offline, etc.) —
+  // on retombe sur un affichage neutre basé sur user uniquement.
+  const plan = me?.plan_type || 'free';
+  const hasUnlimited = !!me?.has_unlimited_vod;
+
+  if (badge) {
+    if (hasUnlimited) {
+      badge.className = 'badge-connected';
+      badge.textContent = planLabel(plan);
+    } else {
+      badge.className = 'badge-disconnected';
+      badge.textContent = t('account.plan.free');
+    }
+  }
+
+  // Si déjà Pro (Streamer ou Viewer), on cache le bouton upgrade
+  if (upgradeBtn) upgradeBtn.style.display = hasUnlimited ? 'none' : '';
+}
+
+function planLabel(plan) {
+  switch (plan) {
+    case 'monthly':
+    case 'annual':
+    case 'lifetime':
+      return t('account.plan.proStreamer');
+    case 'viewer_monthly':
+    case 'viewer_annual':
+      return t('account.plan.proViewer');
+    default:
+      return t('account.plan.free');
+  }
+}
+
+// Dernier état d'accès illimité connu (pour détecter la transition free → pro
+// et demander au content script de refetch la VOD courante).
+let lastHasUnlimited = null;
+
+async function refreshAccount() {
+  const { ss_user: user } = await new Promise(r =>
+    chrome.storage.local.get(['ss_user'], r)
+  );
+  if (!user) {
+    renderAccount(null);
+    lastHasUnlimited = null;
+    return;
+  }
+
+  // Tente de récupérer le statut d'abo frais. Si le JWT a expiré, le service-worker
+  // le purge lui-même et retourne une erreur, on repasse en logged out.
+  chrome.runtime.sendMessage({ type: 'SS_ME' }, res => {
+    if (res?.ok) {
+      renderAccount({ user, me: res.me });
+
+      // Toute transition d'accès (free↔pro) déclenche un retry côté content
+      // script pour re-synchroniser l'état VOD :
+      //   - free → pro : purge le banner "Passe Pro Viewer" et recharge la timeline.
+      //   - pro → free : purge la timeline stale et fait apparaître le banner si
+      //     la VOD est au-delà des 3 dernières sessions.
+      const nowUnlimited = !!res.me.has_unlimited_vod;
+      if (lastHasUnlimited !== null && nowUnlimited !== lastHasUnlimited) {
+        chrome.storage.local.set({ ss_vod_error: null });
+        sendToVodTab({ type: 'RETRY_VOD_FETCH' });
+      }
+      lastHasUnlimited = nowUnlimited;
+    } else if (res?.errorCode === 'jwt_invalid' || res?.errorCode === 'not_authenticated') {
+      renderAccount(null);
+      lastHasUnlimited = null;
+    } else {
+      // Échec réseau ou autre : on affiche quand même l'user, sans plan à jour
+      renderAccount({ user, me: null });
+    }
+  });
+}
+
+function handleSsLoginClick(btn) {
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = t('account.loggingIn');
+
+  chrome.runtime.sendMessage({ type: 'SS_LOGIN' }, res => {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    if (res?.ok) {
+      refreshAccount();
+    } else if (res?.error && !/cancel/i.test(res.error)) {
+      // User n'a pas annulé : erreur réelle, on la remonte
+      console.error('[StreamSync] Login failed:', res.error);
+    }
+  });
+}
+
+document.getElementById('btn-ss-login-gate')?.addEventListener('click', e => {
+  handleSsLoginClick(e.currentTarget);
+});
+
+document.getElementById('btn-ss-logout')?.addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'SS_LOGOUT' }, () => {
+    renderAccount(null);
+  });
+});
+
+document.getElementById('btn-ss-upgrade')?.addEventListener('click', () => {
+  chrome.tabs.create({ url: SS_PRICING_URL });
+});
+
+// Re-render le compte quand le storage change (logout depuis un autre popup, JWT purgé sur 401, etc.)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if ('ss_user' in changes || 'ss_jwt' in changes) refreshAccount();
+});
+
+refreshAccount();
+
+// Polling pour catcher un upgrade Stripe sans avoir à rouvrir le popup. Le webhook
+// met quelques secondes à propager le changement de plan en DB — on refetch
+// discrètement tant que le popup est ouvert.
+let accountPollTimer = null;
+function startAccountPolling() {
+  if (accountPollTimer) return;
+  accountPollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') refreshAccount();
+  }, 10_000);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshAccount();
+});
+window.addEventListener('unload', () => {
+  if (accountPollTimer) { clearInterval(accountPollTimer); accountPollTimer = null; }
+});
+startAccountPolling();

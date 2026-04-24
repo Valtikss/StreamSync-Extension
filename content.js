@@ -6,6 +6,14 @@
 (function () {
   'use strict';
 
+  // Guard d'idempotence : le popup peut re-injecter ce script via
+  // chrome.scripting.executeScript quand le PING précédent a échoué (onglet
+  // VOD ouvert avant installation, extension rechargée, etc.). Sans guard, on
+  // dupliquerait MutationObserver, onMessage listener, setInterval et events
+  // vidéo à chaque tentative d'injection.
+  if (self.__streamsync_content_loaded) return;
+  self.__streamsync_content_loaded = true;
+
   // ─── i18n (helper court pour les labels UI du lecteur YT) ────────────────────
   const i18n = self.SS_I18N;
   i18n?.loadLang();
@@ -308,8 +316,13 @@
       // logarithmique, un slider linéaire "sonne" trop fort dès les petites
       // valeurs. Quadratique donne une progression bien plus naturelle (un
       // slider à 10 sort vraiment faible, 50 est un volume moyen, 100 max).
+      // Floor à 1 quand slider > 0 : sans ça, Math.round(slider²/100) = 0 pour
+      // slider ∈ [1, 7] → zone morte silencieuse et l'user qui baisse à fond
+      // n'entend plus rien, doit remonter et tombe directement sur le 1er
+      // niveau audible (trop fort de son point de vue).
       function toYtVolume(slider) {
-        return Math.round((slider * slider) / 100);
+        if (slider <= 0) return 0;
+        return Math.max(1, Math.round((slider * slider) / 100));
       }
 
       // Helper unmute : utilisé par le bouton overlay, le slider, et le mute btn.
@@ -380,9 +393,6 @@
         try { chrome.storage.local.set({ ss_yt_collapsed: collapsed }); } catch (e) {}
       });
 
-      // Restaure l'état au mount (currentCollapsed est setté par ensureIframe)
-      if (currentCollapsed) applyCollapsed(true);
-
       // Overlay "track non dispo sur YouTube" — affiché par-dessus l'iframe
       // quand resolveVideoId retourne null. Hidden par défaut.
       const unavailable = document.createElement('div');
@@ -422,6 +432,11 @@
         z-index: 2;
         background: linear-gradient(135deg, transparent 50%, rgba(255,107,74,0.6) 50%, rgba(255,107,74,0.6) 65%, transparent 65%, transparent 75%, rgba(255,107,74,0.6) 75%, rgba(255,107,74,0.6) 90%, transparent 90%);
       `;
+
+      // Restaure l'état au mount (currentCollapsed est setté par ensureIframe).
+      // Doit rester APRÈS les déclarations de `unavailable` et `resizeHandle`
+      // car applyCollapsed() les référence — sinon TDZ ReferenceError.
+      if (currentCollapsed) applyCollapsed(true);
 
       container.appendChild(header);
       container.appendChild(iframe);
@@ -1015,6 +1030,29 @@
         sendResponse?.({ ok: false, error: String(err?.message || err) });
       });
       return true; // réponse asynchrone
+    }
+
+    // Re-fetch de la timeline VOD après un upgrade de plan côté popup.
+    // Sans ça, l'ancien ss_vod_error (ex: free_plan_limit) resterait en storage
+    // et le popup garderait l'ancien message jusqu'à un F5 manuel.
+    if (msg?.type === 'RETRY_VOD_FETCH') {
+      const videoId = extractVideoId(location.href);
+      if (!videoId) { sendResponse?.({ ok: false, error: 'no_vod' }); return; }
+      safeSend({ type: 'FETCH_VOD_TIMELINE', videoId }, response => {
+        if (!response?.ok) {
+          writeStorage(null);
+          clearTimeline();
+          writeVodError(response?.errorCode || response?.error || 'unknown', response?.errorData || null);
+          sendResponse?.({ ok: false, error: response?.error });
+          return;
+        }
+        clearVodError();
+        timeline = response.data.timeline;
+        if (!timeline.length) { writeStorage(null); sendResponse?.({ ok: true, empty: true }); return; }
+        writeTimeline(videoId, timeline);
+        sendResponse?.({ ok: true });
+      });
+      return true;
     }
 
     if (!videoEl) { sendResponse?.({ ok: false, error: 'no_video' }); return; }
