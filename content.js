@@ -235,7 +235,13 @@
         const ifr = document.createElement('iframe');
         ifr.id = 'streamsync-yt-iframe';
         ifr.src = 'https://www.youtube.com/embed/?enablejsapi=1&autoplay=1&mute=1&controls=1&modestbranding=1&rel=0&playsinline=1';
-        ifr.allow = 'autoplay; encrypted-media; picture-in-picture';
+        // Pas de picture-in-picture : certaines extensions tierces (PiP boutons
+        // pour Twitch) énumèrent les iframes éligibles au PiP et ciblent la
+        // nôtre avant la vidéo Twitch, ce qui casse notre iframe (la video
+        // interne est déplacée par Chrome et ne revient pas proprement).
+        // On ne perd rien, on ne veut que l'audio ; le PiP n'a jamais été exposé.
+        ifr.allow = 'autoplay; encrypted-media';
+        ifr.disablePictureInPicture = true;
         ifr.style.cssText = `
           display: ${collapsed ? 'none' : 'block'};
           width: 100%;
@@ -539,8 +545,10 @@
       // theatre, navigation SPA sans URL change) et arracher notre container
       // sans qu'on soit notifié. Sans ce check, la closure garde iframe!=null
       // et l'early-return ci-dessous empêche toute reconstruction → lecteur
-      // fantôme. On détecte le détachement et on reset l'état.
-      if (iframe && !document.body.contains(iframe)) {
+      // fantôme. On détecte aussi le cas où une extension tierce (PiP, etc.)
+      // déplace notre iframe hors de son container → on reset et rebuild.
+      const ctn = document.getElementById(CONTAINER_ID);
+      if (iframe && (!document.body.contains(iframe) || !ctn || !ctn.contains(iframe))) {
         windowListeners.forEach(({ type, fn }) => window.removeEventListener(type, fn));
         windowListeners.length = 0;
         if (loadSeekTimer) { clearTimeout(loadSeekTimer); loadSeekTimer = null; }
@@ -550,6 +558,10 @@
         iframeReady = false;
         currentVideoId = null;
         pendingCmd = null;
+        // Nettoie un éventuel container orphelin (ex: iframe déplacée ailleurs
+        // par une extension tierce mais container resté en place) pour éviter
+        // un doublon après rebuild.
+        ctn?.remove();
       }
       if (iframe || building) return;
       building = true;

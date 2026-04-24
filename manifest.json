@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StreamSync",
-  "version": "3.8",
+  "version": "3.9",
   "description": "Resynchronise la musique Spotify sur les rediffusions Twitch",
 
   "permissions": ["storage", "identity", "tabs", "notifications"],
