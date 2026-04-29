@@ -1,0 +1,17 @@
+{
+  "name": "streamsync-extension",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Resynchronise la musique Spotify sur les rediffusions Twitch",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs all",
+    "build:chrome": "node build.mjs chrome",
+    "build:firefox": "node build.mjs firefox",
+    "pack": "node build.mjs pack all",
+    "pack:chrome": "node build.mjs pack chrome",
+    "pack:firefox": "node build.mjs pack firefox",
+    "pack:source": "node build.mjs source",
+    "clean": "node -e \"import('node:fs/promises').then(fs=>fs.rm('dist',{recursive:true,force:true}))\""
+  }
+}

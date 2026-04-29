@@ -1,6 +1,6 @@
 🇬🇧 [English version](README.md)
 
-# 🎵 StreamSync - Extension Chrome
+# 🎵 StreamSync - Extension navigateur (Chrome & Firefox)
 
 **Entends exactement ce que le streamer écoutait, au bon moment.**
 
@@ -23,9 +23,10 @@ Pendant le live, le serveur StreamSync enregistre ce que le streamer écoute sur
 
 ## 📋 Prérequis
 
-- **Google Chrome** (ou tout navigateur basé sur Chromium)
+- **Google Chrome** (ou tout navigateur basé sur Chromium) **ou Firefox 140+**
 - Un compte **Spotify Premium** (requis pour le contrôle de lecture via l'API Spotify)
 - Une **app Spotify Developer** (gratuit - guide ci-dessous)
+- **Node.js 18+** (uniquement pour générer le build de l'extension)
 
 ---
 
@@ -34,11 +35,22 @@ Pendant le live, le serveur StreamSync enregistre ce que le streamer écoute sur
 1. Télécharge ou clone ce dépôt :
    ```bash
    git clone https://github.com/Valtikss/streamsync-extension.git
+   cd streamsync-extension
    ```
-2. Ouvre Chrome et va sur `chrome://extensions/`
-3. Active le **Mode développeur** (toggle en haut à droite)
-4. Clique sur **Charger l'extension non empaquetée** et sélectionne le dossier `streamsync-extension`
-5. L'icône StreamSync devrait apparaître dans ta barre d'outils - épingle-la pour y accéder facilement
+2. Génère le build de l'extension :
+   ```bash
+   npm run build           # build Chrome ET Firefox
+   npm run build:chrome    # Chrome seul → dist/chrome/
+   npm run build:firefox   # Firefox seul → dist/firefox/
+   npm run pack            # build + zip → dist/streamsync-chrome-X.Y.zip + streamsync-firefox-X.Y.zip
+   ```
+3. Charge l'extension dans ton navigateur :
+   - **Chrome / Chromium / Edge :** ouvre `chrome://extensions/`, active le **Mode développeur** (toggle en haut à droite), clique sur **Charger l'extension non empaquetée**, sélectionne le dossier `dist/chrome/`.
+   - **Firefox :** ouvre `about:debugging#/runtime/this-firefox`, clique sur **Charger un module complémentaire temporaire…**, sélectionne `dist/firefox/manifest.json`.
+4. L'icône StreamSync devrait apparaître dans ta barre d'outils - épingle-la pour y accéder facilement.
+
+> Le dossier `dist/` est git-ignored. Relance `npm run build` après chaque modif de code.
+> Les zips pré-buildés sont publiés sur la [page Releases](../../releases) — télécharge-les et charge l'extension non empaquetée (Chrome) ou via `about:debugging` (Firefox, temporaire).
 
 ---
 
@@ -60,10 +72,12 @@ Tu as besoin de ton propre Client ID Spotify. Voici comment l'obtenir :
 
 ### Étape 2 - Configurer la Redirect URI
 
-1. Ouvre le popup de l'extension StreamSync dans Chrome
+1. Ouvre le popup de l'extension StreamSync
 2. Va dans l'onglet **Paramètres**
 3. Sous "Configuration Spotify", tu verras une **Redirect URI** - clique dessus pour la copier
 4. Retourne dans les settings de ton app Spotify, colle cette URI comme **Redirect URI** et sauvegarde
+
+> ⚠️ La Redirect URI est **différente sur Chrome et Firefox** (Chrome utilise `https://<id>.chromiumapp.org/`, Firefox utilise `https://<id>.extensions.allizom.org/`). Si tu utilises les deux navigateurs, enregistre **les deux URIs** dans les paramètres de ton app Spotify.
 
 ### Étape 3 - Copier ton Client ID
 
@@ -95,14 +109,25 @@ Tu as besoin de ton propre Client ID Spotify. Voici comment l'obtenir :
 ## 🗂 Structure du projet
 
 ```
-├── manifest.json        # Chrome Extension Manifest V3
-├── content.js           # Injecté sur les pages VOD Twitch - logique de sync
-├── service-worker.js    # Worker background - OAuth PKCE, appels API Spotify
+├── manifest.chrome.json  # Manifest V3 pour Chrome / Chromium
+├── manifest.firefox.json # Manifest V3 pour Firefox (browser_specific_settings.gecko)
+├── build.mjs             # Script de build - assemble dist/chrome/ et dist/firefox/
+├── package.json          # Scripts npm (build, build:chrome, build:firefox, clean)
+├── content.js            # Injecté sur les pages VOD Twitch - logique de sync
+├── service-worker.js     # Worker background - OAuth PKCE, appels API Spotify
 ├── popup.html / popup.js # UI du popup de l'extension
-├── overlay.css          # Styles overlay in-page (optionnel)
-├── icons/               # Icônes de l'extension (16, 48, 128)
-└── spotify-logo.svg     # Logo Spotify utilisé dans le popup
+├── overlay.css           # Styles overlay in-page (optionnel)
+├── i18n/                 # Locales et helpers de traduction
+├── icons/                # Icônes de l'extension (16, 48, 128)
+├── spotify-logo.svg      # Logo Spotify utilisé dans le popup
+└── dist/                 # Généré par `npm run build` (git-ignored)
+    ├── chrome/           # Build Chrome non empaqueté
+    └── firefox/          # Build Firefox non empaqueté
 ```
+
+Les deux manifests partagent exactement le même code source ; seul le manifest diffère :
+- Chrome conserve le champ `key` (extension ID stable en dev) et utilise `background.service_worker`.
+- Firefox utilise `browser_specific_settings.gecko` (id + `strict_min_version: "140.0"`, `data_collection_permissions`) et `background.scripts` (Firefox MV3 ne supporte pas `service_worker` hors flag).
 
 ---
 

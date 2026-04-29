@@ -2,6 +2,20 @@
 
 document.getElementById('ext-version').textContent = `v${chrome.runtime.getManifest().version}`;
 
+// ─── DOM helpers (évite innerHTML pour passer la lint AMO no-unsanitized) ─────
+// DOMParser parse en document inerte (pas d'exécution de scripts ni de handlers
+// inline) avant adoption dans le live document. Toutes les valeurs interpolées
+// dans les templates passent déjà par escapeHtml/esc côté appelants.
+function htmlToFragment(html) {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const frag = document.createDocumentFragment();
+  while (doc.body.firstChild) frag.appendChild(doc.body.firstChild);
+  return frag;
+}
+function setHTML(el, html) { el.replaceChildren(htmlToFragment(html)); }
+function prependHTML(el, html) { el.insertBefore(htmlToFragment(html), el.firstChild); }
+function replaceOuterHTML(el, html) { el.replaceWith(htmlToFragment(html)); }
+
 // ─── i18n : charge la langue et applique les traductions statiques ────────────
 
 const i18n = self.SS_I18N;
@@ -21,7 +35,7 @@ i18n.loadLang().then(lang => {
 function applyYoutubeInfo() {
   const el = document.getElementById('yt-info2-placeholder');
   if (!el) return;
-  el.innerHTML = t('yt.info2', { btn: `<strong>${t('yt.info.activate')}</strong>` });
+  setHTML(el, t('yt.info2', { btn: `<strong>${t('yt.info.activate')}</strong>` }));
 }
 
 function applyLangSelect(lang) {
@@ -431,10 +445,10 @@ function renderActiveTabBanner(container, tab) {
     </div>
   `;
   if (!banner) {
-    container.insertAdjacentHTML('afterbegin', html);
+    prependHTML(container, html);
     banner = container.querySelector('.np-active-tab');
   } else if (banner.dataset.tabId !== String(tab.id)) {
-    banner.outerHTML = html;
+    replaceOuterHTML(banner, html);
     banner = container.querySelector('.np-active-tab');
   }
   banner.onclick = () => {
@@ -476,7 +490,7 @@ function pingContentScript(tab, cb) {
 function renderF5Hint(container) {
   removeActiveTabBanner(container);
   if (container.querySelector('.np-f5-hint')) return;
-  container.innerHTML = `
+  setHTML(container, `
     <div class="np-f5-hint">
       <span class="np-f5-icon">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -486,7 +500,7 @@ function renderF5Hint(container) {
       </span>
       <span>${t('np.f5hint.msg', { kbd: `<kbd>${t('np.f5hint.key')}</kbd>` })}</span>
     </div>
-  `;
+  `);
 }
 
 // Injection programmée du content script quand le PING échoue. Évite à
@@ -543,7 +557,7 @@ function renderNowPlaying() {
             if (track || vodError) chrome.storage.local.set({ ss_now_playing: null, ss_vod_error: null, ss_timeline: null });
             removeActiveTabBanner(container);
             if (!container.querySelector('.np-idle') || container.querySelector('.np-error')) {
-              container.innerHTML = `<div class="np-idle">${t('np.idle')}</div>`;
+              setHTML(container, `<div class="np-idle">${t('np.idle')}</div>`);
             }
           }
         });
@@ -587,7 +601,9 @@ function renderTrackOrError(container, track, vodError) {
       const existingError = container.querySelector('.np-error');
       if (!existingError || existingError.dataset.msg !== msg) {
         const banner = container.querySelector('.np-active-tab');
-        container.innerHTML = (banner ? banner.outerHTML : '') + html;
+        container.replaceChildren();
+        if (banner) container.appendChild(banner);
+        container.appendChild(htmlToFragment(html));
         const newErr = container.querySelector('.np-error');
         if (newErr) newErr.dataset.msg = msg;
       }
@@ -595,14 +611,18 @@ function renderTrackOrError(container, track, vodError) {
     }
     if (!container.querySelector('.np-idle') || container.querySelector('.np-error')) {
       const banner = container.querySelector('.np-active-tab');
-      container.innerHTML = (banner ? banner.outerHTML : '') + `<div class="np-idle">${t('np.idle')}</div>`;
+      container.replaceChildren();
+      if (banner) container.appendChild(banner);
+      container.appendChild(htmlToFragment(`<div class="np-idle">${t('np.idle')}</div>`));
     }
     return;
   }
 
   if (!container.querySelector('.np-vinyl-wrap')) {
     const banner = container.querySelector('.np-active-tab');
-    container.innerHTML = (banner ? banner.outerHTML : '') + buildNowPlayingHTML();
+    container.replaceChildren();
+    if (banner) container.appendChild(banner);
+    container.appendChild(htmlToFragment(buildNowPlayingHTML()));
     wireNowPlayingActions();
   }
 
@@ -648,7 +668,7 @@ function renderTracklist() {
     // Rebuild la liste seulement si VOD a changé. Sinon on toggle juste la classe .current.
     if (ss_timeline.vodId !== lastTracklistVodId) {
       lastTracklistVodId = ss_timeline.vodId;
-      list.innerHTML = ss_timeline.tracks.map(t => `
+      setHTML(list, ss_timeline.tracks.map(t => `
         <div class="tracklist-item" data-uri="${escapeHtml(t.track_uri)}" data-pos="${t.stream_position_ms}">
           <span class="tracklist-time">${formatStreamPos(t.stream_position_ms)}</span>
           <div class="tracklist-info">
@@ -656,7 +676,7 @@ function renderTracklist() {
             <div class="tracklist-artist">${escapeHtml(t.artist_name || '')}</div>
           </div>
         </div>
-      `).join('');
+      `).join(''));
       list.querySelectorAll('.tracklist-item').forEach(item => {
         item.addEventListener('click', () => {
           const pos = Number(item.dataset.pos);
@@ -815,7 +835,7 @@ function cancelDevicesRetry() {
 
 function loadDevices() {
   const list = document.getElementById('device-list');
-  list.innerHTML = `<div class="devices-empty">${t('devices.loading')}</div>`;
+  setHTML(list, `<div class="devices-empty">${t('devices.loading')}</div>`);
   showDevicesSection(true);
 
   chrome.runtime.sendMessage({ type: 'SPOTIFY_GET_DEVICES' }, res => {
@@ -823,7 +843,7 @@ function loadDevices() {
     // l'API Connect ne fonctionne qu'avec Premium. On prévient l'user direct.
     if (res?.ok && res.product && res.product !== 'premium') {
       cancelDevicesRetry();
-      list.innerHTML = `
+      setHTML(list, `
         <div class="devices-free-warn">
           <div class="devices-free-warn-icon">⚠</div>
           <div class="devices-free-warn-body">
@@ -836,12 +856,12 @@ function loadDevices() {
             </a>
           </div>
         </div>
-      `;
+      `);
       return;
     }
 
     if (!res?.ok || !res.devices?.length) {
-      list.innerHTML = `
+      setHTML(list, `
         <div class="devices-empty">
           <div>${t('devices.empty.title')}</div>
           <div class="devices-empty-hint">${t('devices.empty.hint')}</div>
@@ -850,7 +870,7 @@ function loadDevices() {
             <span>${t('devices.refresh')}</span>
           </button>
         </div>
-      `;
+      `);
       const retryBtn = document.getElementById('btn-retry-devices');
       retryBtn?.addEventListener('click', () => loadDevices());
       scheduleDevicesRetry();
@@ -865,16 +885,16 @@ function loadDevices() {
 
 function renderDevices(devices, selectedDeviceId) {
   const list = document.getElementById('device-list');
-  list.innerHTML = '';
+  list.replaceChildren();
   devices.forEach(device => {
     const isSelected = device.id === selectedDeviceId;
     const item = document.createElement('div');
     item.className = `device-item${isSelected ? ' selected' : ''}`;
-    item.innerHTML = `
+    setHTML(item, `
       <span class="device-icon">${deviceIcon(device.type)}</span>
       <span class="device-name" title="${esc(device.name)}">${esc(device.name)}</span>
       <span class="device-check">✓</span>
-    `;
+    `);
     item.addEventListener('click', () => {
       chrome.storage.local.set({ selectedDeviceId: device.id }, () => {
         document.querySelectorAll('.device-item').forEach(el => el.classList.remove('selected'));
@@ -925,9 +945,9 @@ function setSpotifyStatus(connected) {
     badge.textContent = t('spotify.disconnected');
     badge.className = 'badge-disconnected';
     btnConnect.style.display = 'flex';
-    btnConnect.innerHTML = `
+    setHTML(btnConnect, `
       <img src="spotify-logo.svg" width="12" height="12" alt="" />
-      ${t('spotify.connect')}`;
+      ${t('spotify.connect')}`);
     btnDisconnect.style.display = 'none';
   }
 

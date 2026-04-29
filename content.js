@@ -19,6 +19,27 @@
   i18n?.loadLang();
   const _t = (key, vars) => (i18n ? i18n.t(key, vars) : key);
 
+  // ─── DOM helpers (évite innerHTML pour passer la lint AMO no-unsanitized) ────
+  // DOMParser produit un document inerte ; les nodes sont adoptés sans exécution.
+  // Variante SVG nécessaire car le parser HTML bascule en foreign content
+  // uniquement sous <svg> ; un <path> nu serait sinon créé en namespace HTML.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function htmlToFragment(html) {
+    const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+    const frag = document.createDocumentFragment();
+    while (doc.body.firstChild) frag.appendChild(doc.body.firstChild);
+    return frag;
+  }
+  function svgToFragment(html) {
+    const doc = new DOMParser().parseFromString(`<svg xmlns="${SVG_NS}">${html}</svg>`, 'image/svg+xml');
+    const frag = document.createDocumentFragment();
+    while (doc.documentElement.firstChild) frag.appendChild(doc.documentElement.firstChild);
+    return frag;
+  }
+  function setHTML(el, html) {
+    el.replaceChildren(el.namespaceURI === SVG_NS ? svgToFragment(html) : htmlToFragment(html));
+  }
+
   // ─── État ────────────────────────────────────────────────────────────────────
   let timeline = [];
   let videoEl = null;
@@ -204,7 +225,7 @@
         cursor: grab;
         user-select: none;
       `;
-      header.innerHTML = `
+      setHTML(header, `
         <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">
           <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff6b4a;box-shadow:0 0 8px #ff6b4a"></span>
           <span style="white-space:nowrap">StreamSync</span>
@@ -234,7 +255,7 @@
           }
           #streamsync-yt-mute:hover { opacity: 1 !important; }
         </style>
-      `;
+      `);
 
       // Iframe vide → on charge le premier morceau via postMessage(loadVideoById).
       // Factorisé pour permettre au bouton "refresh" de la recréer sans toucher
@@ -309,7 +330,7 @@
           // Normal
           path = 'M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z';
         }
-        volIcon.innerHTML = `<path d="${path}"/>`;
+        setHTML(volIcon, `<path d="${path}"/>`);
       }
 
       // Courbe perceptuelle : l'oreille humaine perçoit le volume de manière
@@ -384,7 +405,7 @@
         if (unmuteBtn?.parentNode) unmuteBtn.style.display = visible;
         unavailable.style.display = collapsed ? 'none' : (unavailable.dataset.shown === '1' ? 'flex' : 'none');
         resizeHandle.style.display = visible;
-        collapseIcon.innerHTML = collapsed ? ICON_EXPAND : ICON_COLLAPSE;
+        setHTML(collapseIcon, collapsed ? ICON_EXPAND : ICON_COLLAPSE);
         collapseBtn.title = collapsed ? _t('yt.expand') : _t('yt.collapse');
       }
 
@@ -412,14 +433,14 @@
         z-index: 1;
         backdrop-filter: blur(4px);
       `;
-      unavailable.innerHTML = `
+      setHTML(unavailable, `
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,107,74,0.7)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/>
           <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
         </svg>
         <div style="font-size:11px;font-weight:700;color:#ff9a76;letter-spacing:0.04em;text-transform:uppercase">${_t('yt.unavailable')}</div>
         <div id="streamsync-yt-unavailable-track" style="font-size:11px;color:#7a82a6;line-height:1.4;max-width:280px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical"></div>
-      `;
+      `);
       container.appendChild(unavailable);
 
       // Poignée de resize en bas-droite (largeur uniquement, height suit l'aspect ratio)

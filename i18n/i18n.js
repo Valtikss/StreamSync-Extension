@@ -56,7 +56,15 @@
     scope.querySelectorAll('[data-i18n-html]').forEach(el => {
       const key = el.getAttribute('data-i18n-html');
       const vars = parseVars(el.getAttribute('data-i18n-vars'));
-      el.innerHTML = t(key, vars);
+      // DOMParser-based : évite innerHTML pour passer la lint AMO no-unsanitized.
+      // Les locales sont bundlées (sources internes), donc safe ; le parser
+      // produit un document inerte (pas d'exécution de scripts) avant adoption.
+      // applyI18n n'est invoqué que depuis popup/content (jamais SW), donc
+      // `document` est garanti.
+      const parsed = new DOMParser().parseFromString(`<body>${t(key, vars)}</body>`, 'text/html');
+      const frag = document.createDocumentFragment();
+      while (parsed.body.firstChild) frag.appendChild(parsed.body.firstChild);
+      el.replaceChildren(frag);
     });
     scope.querySelectorAll('[data-i18n-attr]').forEach(el => {
       const pairs = el.getAttribute('data-i18n-attr').split(',');

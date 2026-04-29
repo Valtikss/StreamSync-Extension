@@ -1,0 +1,64 @@
+{
+  "manifest_version": 3,
+  "name": "StreamSync",
+  "version": "4.0",
+  "description": "Resynchronise la musique Spotify sur les rediffusions Twitch",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "streamsync@altitudeinfra.fr",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
+    }
+  },
+
+  "permissions": ["storage", "identity", "tabs", "notifications", "scripting"],
+
+  "host_permissions": [
+    "https://www.twitch.tv/*",
+    "https://player.twitch.tv/*",
+    "https://api.spotify.com/*",
+    "https://accounts.spotify.com/*",
+    "https://open.spotify.com/*",
+    "https://www.youtube.com/*",
+    "https://streamsync.fr/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
+  ],
+
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.twitch.tv/*",
+        "https://player.twitch.tv/*"
+      ],
+      "js": ["i18n/locales.js", "i18n/i18n.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "background": {
+    "scripts": ["i18n/locales.js", "i18n/i18n.js", "service-worker.js"]
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "StreamSync",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}

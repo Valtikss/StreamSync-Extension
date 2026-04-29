@@ -1,7 +1,12 @@
 // StreamSync - Service Worker MV3
 // Gère : appels API backend, OAuth Spotify PKCE, contrôle Spotify Connect
 
-importScripts('i18n/locales.js', 'i18n/i18n.js');
+// importScripts n'existe que dans un vrai Service Worker (Chrome, Firefox 121+).
+// En fallback Firefox `background.scripts`, locales.js + i18n.js sont déjà chargés
+// par le manifest avant ce fichier — on évite donc l'appel.
+if (typeof importScripts === 'function') {
+  importScripts('i18n/locales.js', 'i18n/i18n.js');
+}
 self.SS_I18N.loadLang();
 const _t = (key, vars) => self.SS_I18N.t(key, vars);
 
