@@ -72,7 +72,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
 
     case 'SS_LOGIN':
-      loginStreamSync()
+      // mode === 'tab' → fallback Arc/Brave/etc. quand launchWebAuthFlow ne
+      // déclenche aucune popup visible (cf. waitOAuthRedirectInTab).
+      loginStreamSync(message.mode === 'tab' ? 'tab' : 'popup')
         .then(user => sendResponse({ ok: true, user }))
         .catch(err => sendResponse({ ok: false, error: err.message }));
       return true;
@@ -247,7 +249,7 @@ async function clearSsAuth() {
   await chrome.storage.local.remove([SS_JWT_KEY, SS_USER_KEY, SS_EXPIRES_KEY]);
 }
 
-async function loginStreamSync() {
+async function loginStreamSync(mode = 'popup') {
   const { apiUrl } = await getConfig();
   const redirectUri = chrome.identity.getRedirectURL();
 
@@ -259,15 +261,20 @@ async function loginStreamSync() {
   }
   const { url: authUrl } = await urlRes.json();
 
-  // 2. Ouvre la popup OAuth, Chrome capture le redirect final
-  const redirectUrl = await new Promise((resolve, reject) => {
-    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, finalUrl => {
-      if (chrome.runtime.lastError || !finalUrl) {
-        return reject(new Error(chrome.runtime.lastError?.message || _t('err.authCancelled')));
-      }
-      resolve(finalUrl);
-    });
-  });
+  // 2. Ouvre la popup OAuth, Chrome capture le redirect final.
+  // Mode 'tab' = fallback pour les navigateurs où launchWebAuthFlow n'ouvre
+  // rien de visible (Arc notamment) : on ouvre l'URL Twitch dans un onglet
+  // normal et on capture le redirect via chrome.tabs.onUpdated.
+  const redirectUrl = mode === 'tab'
+    ? await waitOAuthRedirectInTab(authUrl, redirectUri)
+    : await new Promise((resolve, reject) => {
+        chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, finalUrl => {
+          if (chrome.runtime.lastError || !finalUrl) {
+            return reject(new Error(chrome.runtime.lastError?.message || _t('err.authCancelled')));
+          }
+          resolve(finalUrl);
+        });
+      });
 
   // 3. Extrait le code
   const parsed = new URL(redirectUrl);
@@ -298,6 +305,54 @@ async function loginStreamSync() {
 
   console.log(`[StreamSync] Connecté en tant que @${data.user?.twitch_username}`);
   return data.user;
+}
+
+// Fallback OAuth : ouvre authUrl dans un onglet normal et résout sur le
+// redirect vers chromiumapp.org. Sert quand launchWebAuthFlow ne montre rien
+// (Arc browser, certains profils Chromium custom). Le tab navigue vers
+// chromiumapp.org qui ne résout pas vraiment, mais tabs.onUpdated fire avec
+// l'URL avant l'échec de chargement → on récupère le code et on ferme.
+function waitOAuthRedirectInTab(authUrl, redirectUri) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.create({ url: authUrl, active: true }, tab => {
+      const tabId = tab.id;
+      let settled = false;
+      let timeoutHandle = null;
+
+      const cleanup = () => {
+        chrome.tabs.onUpdated.removeListener(updateListener);
+        chrome.tabs.onRemoved.removeListener(removedListener);
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      };
+      const settle = fn => { if (!settled) { settled = true; cleanup(); fn(); } };
+
+      function updateListener(updatedTabId, changeInfo) {
+        if (updatedTabId !== tabId) return;
+        // Selon la version du navigateur, le redirect apparaît dans `url` ou
+        // dans `pendingUrl` (pendant la navigation, avant l'échec DNS sur
+        // chromiumapp.org).
+        const url = changeInfo.url || changeInfo.pendingUrl;
+        if (url && url.startsWith(redirectUri)) {
+          chrome.tabs.remove(tabId).catch(() => {});
+          settle(() => resolve(url));
+        }
+      }
+      function removedListener(closedTabId) {
+        if (closedTabId !== tabId) return;
+        // User a fermé l'onglet manuellement → traité comme une annulation
+        settle(() => reject(new Error(_t('err.authCancelled'))));
+      }
+
+      chrome.tabs.onUpdated.addListener(updateListener);
+      chrome.tabs.onRemoved.addListener(removedListener);
+
+      // 5 min : large pour laisser le temps à un user lent de se logger Twitch
+      timeoutHandle = setTimeout(() => {
+        chrome.tabs.remove(tabId).catch(() => {});
+        settle(() => reject(new Error('auth_timeout')));
+      }, 5 * 60 * 1000);
+    });
+  });
 }
 
 async function logoutStreamSync() {

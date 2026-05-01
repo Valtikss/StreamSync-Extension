@@ -1083,25 +1083,58 @@ async function refreshAccount() {
   });
 }
 
-function handleSsLoginClick(btn) {
-  btn.disabled = true;
-  const originalText = btn.textContent;
-  btn.textContent = t('account.loggingIn');
+function showGateError(rawError) {
+  const el = document.getElementById('gate-error');
+  if (!el) return;
+  // Map des codes connus vers des messages user-friendly. Les autres
+  // (réseau, backend down…) sont remontés tels quels — souvent assez explicites.
+  let msg;
+  if (rawError === 'auth_timeout') msg = t('account.login.errTimeout');
+  else if (!rawError) msg = t('account.login.errGeneric');
+  else msg = rawError;
+  el.textContent = msg;
+  el.hidden = false;
+}
+function hideGateError() {
+  const el = document.getElementById('gate-error');
+  if (el) el.hidden = true;
+}
 
-  chrome.runtime.sendMessage({ type: 'SS_LOGIN' }, res => {
-    btn.disabled = false;
-    btn.textContent = originalText;
+function handleSsLoginClick(mode) {
+  // Désactive les deux boutons (principal + fallback) pendant la requête pour
+  // éviter qu'on lance deux flows OAuth en parallèle.
+  const mainBtn = document.getElementById('btn-ss-login-gate');
+  const altBtn = document.getElementById('btn-ss-login-tab');
+  const originalMain = mainBtn?.textContent;
+
+  if (mainBtn) { mainBtn.disabled = true; mainBtn.textContent = t('account.loggingIn'); }
+  if (altBtn) altBtn.disabled = true;
+  hideGateError();
+
+  chrome.runtime.sendMessage({ type: 'SS_LOGIN', mode }, res => {
+    if (mainBtn) { mainBtn.disabled = false; mainBtn.textContent = originalMain; }
+    if (altBtn) altBtn.disabled = false;
     if (res?.ok) {
+      hideGateError();
       refreshAccount();
-    } else if (res?.error && !/cancel/i.test(res.error)) {
-      // User n'a pas annulé : erreur réelle, on la remonte
-      console.error('[StreamSync] Login failed:', res.error);
+      return;
     }
+    // Annulation explicite → silencieux (l'user sait qu'il a fermé la popup)
+    if (res?.error && /cancel/i.test(res.error)) return;
+    // Tout autre cas (erreur backend, timeout, channel cassé/res undefined…)
+    // → on affiche quelque chose. showGateError fallback sur un message
+    // générique si l'error string est manquante.
+    console.error('[StreamSync] Login failed:', res?.error || '(no error)');
+    showGateError(res?.error);
   });
 }
 
-document.getElementById('btn-ss-login-gate')?.addEventListener('click', e => {
-  handleSsLoginClick(e.currentTarget);
+document.getElementById('btn-ss-login-gate')?.addEventListener('click', () => {
+  handleSsLoginClick('popup');
+});
+
+document.getElementById('btn-ss-login-tab')?.addEventListener('click', () => {
+  handleSsLoginClick('tab');
 });
 
 document.getElementById('btn-ss-logout')?.addEventListener('click', () => {
