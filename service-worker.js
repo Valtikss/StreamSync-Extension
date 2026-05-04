@@ -23,15 +23,30 @@ const DEV_DETECT_TIMEOUT_MS = 500;
 // démarre le backend local après avoir ouvert le popup).
 let apiUrlPromise = null;
 
+// Flag opt-in en storage : seuls les devs activent ssDevMode=true. Sans ce
+// garde-fou, n'importe quel user qui avait un service local sur le port 3000
+// (Grafana, autre projet Node, Docker…) voyait l'extension router ses appels
+// vers ce service au lieu de la prod, et le login Twitch tombait en erreur
+// authorize_url_failed sans qu'aucune requête n'arrive sur le back de prod.
+// Active via la console du service-worker : chrome.storage.local.set({ ssDevMode: true })
 function detectApiUrl() {
   return (async () => {
+    const { ssDevMode } = await new Promise(resolve =>
+      chrome.storage.local.get(['ssDevMode'], resolve)
+    );
+    if (!ssDevMode) return API_URL_PROD;
+
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), DEV_DETECT_TIMEOUT_MS);
-      // Peu importe la réponse (index.html, 404, 200…) : le fait que la
-      // connexion TCP aboutisse prouve qu'un backend tourne en local.
-      await fetch(API_URL_DEV, { method: 'HEAD', signal: ctrl.signal });
+      // Vérifie via /api/auth/extension/ping que le service local est bien
+      // notre back (signature { service: 'streamsync' }), pas un random
+      // serveur qui squatte le port 3000.
+      const res = await fetch(`${API_URL_DEV}/api/auth/extension/ping`, { signal: ctrl.signal });
       clearTimeout(t);
+      if (!res.ok) return API_URL_PROD;
+      const body = await res.json().catch(() => ({}));
+      if (body.service !== 'streamsync') return API_URL_PROD;
       console.log('[StreamSync] API locale détectée → localhost:3000');
       return API_URL_DEV;
     } catch {
