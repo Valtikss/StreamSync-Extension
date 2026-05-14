@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
   "name": "StreamSync",
-  "version": "4.2",
+  "version": "4.2.1",
   "description": "Resynchronise la musique Spotify sur les rediffusions Twitch",
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "streamsync@altitudeinfra.fr",
+      "id": "streamsync@streamsync.fr",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["none"]
